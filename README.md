@@ -12,13 +12,12 @@ Two optional addons for **World of Warcraft 3.3.5a** (WotLK) that work independa
 
 ## What It Does
 
-### 1. Full Loot Manager + Gold-Per-Hour (GPH) Tracker
+### 1. Full Loot Manager Inventory + Gold-Per-Hour (GPH) Tracker.
 
 Replaces your bag key with a **single inventory window**. Adds a matching **custom bank window**. Includes **skins** (Original, ElvUI Ebonhold, ElvUI) for both the inventory/bank and InstanceTracker.
 
-- Start/stop GPH sessions from anywhere
-- Tracks gold earned and **every item** picked up
-- Full loot manager inside the Inventory and Bank: sort, filter, protect, delete, and auto-vendor — all without leaving your frame.
+- Start/stop GPH sessions from anywhere that tracks gold earned and **every item** picked up
+- Full loot manager inside the Inventory and Bank: sort, filter, protect, delete, continous auto-telete by rarity and auto-vendor — all without leaving your Bags.
 ---
 
 You do **NOT** need the old `FugaziInstanceTracker` folder — it is redundant.
@@ -39,13 +38,13 @@ You do **NOT** need the old `FugaziInstanceTracker` folder — it is redundant.
 ## What Makes These Bags Different
 
 - **One smart window (bags + bank)**  
-  Single inventory and matching bank frame with shared skins (Original, ElvUI‑style, Pimp Purple), list mode + combat grid mode.
+  Single Customizable inventory and matching bank frame with shared skins (Original, ElvUI‑style, Pimp Purple), list mode + grid mode.
 
 - **On‑the‑fly protection (no menus)**  
   Mark signle items and whole rarities as **protected** directly from the list/grid; protected and “previously worn” gear are very hard to accidentally vendor, mail, or delete.
 
 - **Aggressive cleanup tools**  
-  Click whole rarities to delete, or add loot to an **auto‑destroy list** that silently cleans your bags while you farm.
+  Click whole rarities to delete, or add specific Items to an **auto‑delete list** that silently cleans your bags while you farm.
 
 - **Rarity bar as a control panel**  
   The colored rarity buttons aren’t just cosmetics: filter items, protect whole colors, or mass‑delete all incoming junk with a couple of clicks.
@@ -54,13 +53,20 @@ You do **NOT** need the old `FugaziInstanceTracker` folder — it is redundant.
   Laser fast searching in both modes.
 
 - **Protected overlays**  
-  Subtle overlays and icons show at a glance what’s safe, what’s on the chopping block, and what you’ve worn before, in both list and grid.
+  Subtle overlays and icons show at a glance what’s safe, what’s on the chopping block, and what Equipment you have previously worn, in both list and grid.
 
-- **Goblin‑safe vending**  
-  Auto‑vendor at the Goblin Merchant respects all your protections (items, rarities, previously worn) instead of blindly nuking your bags.
+- **Safe vending**  
+  AutoSell respects all your protected Items ( by rarity or previously worn) instead of blindly nuking your bags. Optional Setting to Aggressively VENDOR EVERYTHING thats not Protected when talking to a Vendor. USE AT OWN RISK!
 
 - **GPH baked into the bags**  
-  Gold‑per‑hour sessions live inside the inventory: one click starts tracking gold and loot; the live list and rarity tools work on that same data.
+  Gold‑per‑hour sessions Timer live inside the inventory: one click starts tracking gold and loot and saves it to the Ledger. (Needs InstanceTracker AddOn to log)
+
+- **Notepad**  
+  Ingame Notepad with Tabs to, well... take notes.
+
+- **Add All to Wardrobe**  
+  Adds all items currently in bags to Wardrobe (Ascension)
+
 
 
 ## Disclaimer
@@ -72,7 +78,7 @@ This addon is provided **as-is**. Use it at your own risk. I am not responsible 
 ## Why Use It?
 
 
-Lightweight and built by a farmer, for farmers. Instance cap and run ledger are automatic; the Inventory window gives you a single place for gold tracking, item filtering, whitelisting, mass delete, auto-destroy, one-click DE/Prospect, and auto-vendor + auto-summon pet at the Goblin Merchant. No bloat.
+Lightweight and built by a farmer, for farmers. Instance cap and run ledger are automatic; the Inventory window gives you a single place for gold tracking, item filtering, whitelisting, mass delete, auto-destroy, one-click DE/Prospect, and auto-sell.
 
 
 Happy farming!  
