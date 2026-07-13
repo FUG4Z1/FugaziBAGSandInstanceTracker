@@ -1,4 +1,10 @@
 <p align="center">
+  $$     {\color{#F23C18}{\Huge \textbf{\textsf{ >>>>>>>>>> GET FROM RELEASES!! >>>>>>>>>>}}}}     $$
+</p>
+
+
+
+<p align="center">
   $$     {\color{#006D77}{\Huge \textbf{\textsf{ FugaziBAGS and FugaziInstanceTracker}}}}     $$
 </p>
 
