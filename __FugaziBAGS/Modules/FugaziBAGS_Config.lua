@@ -10,7 +10,8 @@ _G.FugaziBAGS = A
 local DEFAULTS = {
     -- General
     gphInvKeybind = true,
-    gphAutoVendor = true,
+    gphAutoVendor = false,
+    gphAutosellEverything = false,
     gphClickSound = true,
     gridConfirmAutoDel = true,
     gphAutosellPingMs = 200,
@@ -21,15 +22,26 @@ local DEFAULTS = {
     gphFrameAlpha = 0.95,
     gphScale15 = false, -- Legacy toggle for 1.5 multiplier
     gphSortMode = "category", -- "rarity", "vendor", "itemlevel", "category"
-    gphSkin = "fugazi",
+    gphSkin = "elvui_real",
     
     -- Grid/List specific
-    gphGridMode = false,
+    gphGridMode = true,
+    gridCols = 11,
+    gridSlotSize = 36,
+    gridSpacing = 4,
+    gridBorderSize = 3,
+    gridGlowAlpha = 0.80,
+    gridProtDesat = 0.35,
+    gridProtectedKeyAlpha = 0.20,
     
     -- Sorting / Protection
     gphItemTypeCache = {},
     gphDestroyListPerChar = {}, -- Keyed by "Realm#Name"
     _manualUnprotected = {},
+
+    -- Tweaks
+    gphAutoQuestGossip = false,
+    gphProtectPreviouslyWorn = true,
 }
 
 -- Registry for option change listeners

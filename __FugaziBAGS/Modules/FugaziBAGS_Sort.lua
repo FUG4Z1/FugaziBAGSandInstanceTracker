@@ -230,7 +230,7 @@ do
 		if bID == HEARTHSTONE_ID and aID ~= HEARTHSTONE_ID then return false end
 
 		local DB = _G.FugaziBAGSDB
-		local mode = DB and DB.gphSortMode or "rarity"
+		local mode = DB and DB.gphSortMode or "category"
 		local aRarity, bRarity = bagQualities[a] or 0, bagQualities[b] or 0
 
 		
@@ -590,6 +590,11 @@ end
 
 --- Unified Category Organizer for both Inventory and Bank.
 function A.OrganizeBagCategories(itemList, frame, sortMode, DB, poolFunc)
+    if frame then
+        frame.gphCategoryGroups = nil
+        frame.gphCategoryItemList = nil
+        frame.gphCategoryDrawList = nil
+    end
     poolFunc = poolFunc or A.GetRecycledInventoryTable
     local destroyList = A.GetGphDestroyList and A.GetGphDestroyList() or {}
     if sortMode == "category" and #itemList > 0 and GetItemInfo then

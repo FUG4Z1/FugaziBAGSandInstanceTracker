@@ -11,6 +11,49 @@ local InCombatLockdown = _G.InCombatLockdown
 
 local SCROLL_CONTENT_WIDTH = 296
 
+local sessionStartGold, sessionEarned, sessionSpent, lastGold
+local function UpdateSessionGold()
+    local cur = GetMoney() or 0
+    if not sessionStartGold then
+        sessionStartGold = cur
+        lastGold = cur
+        sessionEarned = 0
+        sessionSpent = 0
+        return
+    end
+    local delta = cur - lastGold
+    if delta > 0 then
+        sessionEarned = (sessionEarned or 0) + delta
+    elseif delta < 0 then
+        sessionSpent = (sessionSpent or 0) - delta
+    end
+    lastGold = cur
+end
+
+local goldTrackerFrame = CreateFrame("Frame")
+goldTrackerFrame:RegisterEvent("PLAYER_MONEY")
+goldTrackerFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+goldTrackerFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_ENTERING_WORLD" then
+        local cur = GetMoney() or 0
+        sessionStartGold = cur
+        lastGold = cur
+        sessionEarned = 0
+        sessionSpent = 0
+        
+        -- Save current character class to FugaziBAGSDB
+        local _, myClass = UnitClass("player")
+        if myClass and _G.FugaziBAGSDB then
+            _G.FugaziBAGSDB.charClasses = _G.FugaziBAGSDB.charClasses or {}
+            local myKey = ((GetRealmName and GetRealmName()) or "") .. "#" .. ((UnitName and UnitName("player")) or "")
+            _G.FugaziBAGSDB.charClasses[myKey] = myClass
+        end
+    elseif event == "PLAYER_MONEY" then
+        UpdateSessionGold()
+    end
+end)
+
+
 -------------------------------------------------------------------------------
 -- UI Utilities & Layout Helpers
 -------------------------------------------------------------------------------
@@ -465,8 +508,34 @@ function A.CreateGPHFrame()
     destroyIcon:SetAlpha(1.0)
     destroyBtn.icon = destroyIcon
 
+    -- Click blocker overlay to swallow spam clicks
+    local destroyBlocker = CreateFrame("Button", nil, destroyBtn)
+    destroyBlocker:SetAllPoints(destroyBtn)
+    destroyBlocker:SetFrameLevel(destroyBtn:GetFrameLevel() + 5)
+    destroyBlocker:EnableMouse(true)
+    destroyBlocker:RegisterForClicks("AnyUp", "AnyDown")
+    destroyBlocker:SetScript("OnClick", function() end) -- Consume the clicks
+    destroyBlocker:Hide()
+    destroyBtn.blocker = destroyBlocker
+
+    local lastClickTime = 0
     destroyBtn:SetScript("PreClick", function(self, button, down)
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
         if button ~= "LeftButton" then
+            self:SetAttribute("macrotext1", "")
+            return
+        end
+        local now = GetTime()
+        if now - lastClickTime < 0.25 then
+            self:SetAttribute("macrotext1", "")
+            return
+        end
+        lastClickTime = now
+        
+        -- Prevent disenchanting if moving or mounted (failsafe against accidental equips)
+        if (GetUnitSpeed and GetUnitSpeed("player") or 0) > 0 or (IsMounted and IsMounted()) then
             self:SetAttribute("macrotext1", "")
             return
         end
@@ -485,21 +554,21 @@ function A.CreateGPHFrame()
             return
         end
         A.isDisenchanting = true
+        A.activeDisenchantSlot = { bag = bag, slot = slot }
         self:SetAttribute("macrotext1", ("/cast %s;\n/use %d %d"):format(spellName, bag, slot))
-        self:Disable()
-        if f.gphDestroyEnableFrame then f.gphDestroyEnableFrame:SetScript("OnUpdate", nil) end
-        local frame = CreateFrame("Frame", nil, f)
-        f.gphDestroyEnableFrame = frame
-        local accumulated = 0
-        frame:SetScript("OnUpdate", function(_, elapsed)
-            accumulated = accumulated + elapsed
-            if accumulated >= 0.4 then
-                if not UnitCastingInfo or not UnitCastingInfo("player") then
-                    frame:SetScript("OnUpdate", nil)
-                    destroyBtn:Enable()
+        
+        -- Show blocker overlay to absorb all subsequent clicks for 0.5 seconds
+        if self.blocker then
+            self.blocker:Show()
+            self.blocker.elapsed = 0
+            self.blocker:SetScript("OnUpdate", function(self2, elapsed)
+                self2.elapsed = (self2.elapsed or 0) + elapsed
+                if self2.elapsed >= 0.5 then
+                    self2:SetScript("OnUpdate", nil)
+                    self2:Hide()
                 end
-            end
-        end)
+            end)
+        end
     end)
     destroyBtn:SetScript("OnEnter", function()
         if f.gphBtnHover then
@@ -738,9 +807,25 @@ function A.CreateGPHFrame()
             if RefreshGPHUI then RefreshGPHUI() end
         end
     end)
-    gphSearchEditBox:SetScript("OnTextChanged", function(self)
+    gphSearchEditBox:SetScript("OnChar", function()
+        local SV = _G.FugaziBAGSDB
+        if SV and SV.gphClickSound ~= false and PlaySoundFile then
+            PlaySoundFile("Interface\\AddOns\\__FugaziBAGS\\media\\click.ogg")
+        end
+    end)
+    gphSearchEditBox:SetScript("OnTextChanged", function(self, userInput)
         if A.Search and A.Search.Sync then
             A.Search.Sync(self:GetText(), f)
+        end
+        if userInput then
+            local txt = self:GetText()
+            local SV = _G.FugaziBAGSDB
+            if (f._prevSearchLen or 0) > #txt then
+                if SV and SV.gphClickSound ~= false and PlaySoundFile then
+                    PlaySoundFile("Interface\\AddOns\\__FugaziBAGS\\media\\hover.ogg")
+                end
+            end
+            f._prevSearchLen = #txt
         end
     end)
     f.gphSearchEditBox = gphSearchEditBox
@@ -839,6 +924,108 @@ function A.CreateGPHFrame()
     f.gphBottomLeft = gphBottomLeft
     f.gphBottomCenter = gphBottomCenter
     f.gphBottomRight = gphBottomRight
+
+    -- Invisible overlay button for gold hover/tooltip
+    local gphGoldButton = CreateFrame("Button", nil, gphBottomBar)
+    gphGoldButton:SetPoint("TOPLEFT", gphBottomRight, "TOPLEFT", -6, 4)
+    gphGoldButton:SetPoint("BOTTOMRIGHT", gphBottomRight, "BOTTOMRIGHT", 6, -4)
+    gphGoldButton:EnableMouse(true)
+    gphGoldButton:RegisterForClicks("LeftButtonUp")
+    
+    local function Gold_OnEnter(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT", 0, 20)
+        GameTooltip:ClearLines()
+        
+        -- 1. Session Info
+        GameTooltip:AddLine("Session:", 1, 0.82, 0)
+        GameTooltip:AddDoubleLine("Earned:", A.FormatGold(sessionEarned or 0), 1, 1, 1, 1, 1, 1)
+        GameTooltip:AddDoubleLine("Spent:", A.FormatGold(sessionSpent or 0), 1, 1, 1, 1, 1, 1)
+        
+        local diff = (sessionEarned or 0) - (sessionSpent or 0)
+        if diff > 0 then
+            GameTooltip:AddDoubleLine("Profit:", A.FormatGold(diff), 0, 1, 0, 1, 1, 1)
+        elseif diff < 0 then
+            GameTooltip:AddDoubleLine("Deficit:", A.FormatGold(-diff), 1, 0, 0, 1, 1, 1)
+        end
+        
+        -- 2. Character Info (sorted descending by gold amount)
+        local db = _G.InstanceTrackerDB
+        local currentRealm = (GetRealmName and GetRealmName()) or ""
+        local characters = {}
+        local serverTotal = 0
+        
+        local myName = (UnitName and UnitName("player")) or ""
+        local myKey = currentRealm .. "#" .. myName
+        local _, myClass = UnitClass("player")
+        if myClass and _G.FugaziBAGSDB then
+            _G.FugaziBAGSDB.charClasses = _G.FugaziBAGSDB.charClasses or {}
+            _G.FugaziBAGSDB.charClasses[myKey] = myClass
+        end
+        
+        if db and db.accountGold then
+            for key, copper in pairs(db.accountGold) do
+                local realm, name = key:match("^(.-)#(.-)$")
+                if realm == currentRealm and name then
+                    serverTotal = serverTotal + copper
+                    local class = _G.FugaziBAGSDB and _G.FugaziBAGSDB.charClasses and _G.FugaziBAGSDB.charClasses[key]
+                    if not class and _G.ElvDB and _G.ElvDB.class and _G.ElvDB.class[currentRealm] then
+                        class = _G.ElvDB.class[currentRealm][name]
+                    end
+                    table.insert(characters, {
+                        name = name,
+                        amount = copper,
+                        class = class,
+                        isCurrent = (name == myName)
+                    })
+                end
+            end
+        else
+            local copper = GetMoney() or 0
+            serverTotal = copper
+            table.insert(characters, {
+                name = myName,
+                amount = copper,
+                class = myClass,
+                isCurrent = true
+            })
+        end
+        
+        table.sort(characters, function(a, b) return a.amount > b.amount end)
+        
+        if #characters > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Character:", 1, 0.82, 0)
+            
+            for _, char in ipairs(characters) do
+                local color = char.class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[char.class] or { r = 1, g = 1, b = 1 }
+                local nameText = char.name
+                if char.isCurrent then
+                    nameText = char.name .. " |TInterface\\FriendsFrame\\StatusIcon-Online:14|t"
+                end
+                GameTooltip:AddDoubleLine(nameText, A.FormatGold(char.amount), color.r, color.g, color.b, 1, 1, 1)
+            end
+        end
+        
+        -- 3. Server Info
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Server:", 1, 0.82, 0)
+        GameTooltip:AddDoubleLine("Total:", A.FormatGold(serverTotal), 1, 1, 1, 1, 1, 1)
+        
+        GameTooltip:Show()
+    end
+    
+    gphGoldButton:SetScript("OnEnter", Gold_OnEnter)
+    gphGoldButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    gphGoldButton:SetScript("OnClick", function(self, button)
+        if button == "LeftButton" and IsShiftKeyDown() then
+            sessionEarned = 0
+            sessionSpent = 0
+            Gold_OnEnter(self)
+            if PlaySound then PlaySound("igMainMenuOption") end
+        end
+    end)
+    f.gphGoldButton = gphGoldButton
+
 
     -- New: Bag Row for List Mode (Matching Bank style)
     local bagRow = CreateFrame("Frame", nil, f)

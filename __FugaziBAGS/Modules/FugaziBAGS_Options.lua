@@ -433,6 +433,13 @@ local function CreateOptionsPanel()
         local SV = _G.FugaziBAGSDB
         if SV then SV.gridConfirmAutoDel = (self:GetChecked() == 1 or self:GetChecked() == true) end
     end)
+    cbDel:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Confirm Auto Delete", 1, 0.8, 0)
+        GameTooltip:AddLine("Prompts for confirmation before adding items to the auto-destroy list when deleting them from your inventory.\n\nType: [Account Wide]", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cbDel:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local cbAutosell = CreateFrame("CheckButton", "FugaziBAGSAutosellEverythingCheck", panel, "OptionsCheckButtonTemplate")
     cbAutosell:SetPoint("LEFT", cbDel, "RIGHT", 180, 0)
@@ -445,9 +452,51 @@ local function CreateOptionsPanel()
             self:SetChecked(false)
             StaticPopup_Show("GPH_AUTOSELL_EVERYTHING_WARN")
         else
-            SV.gphAutosellEverything = false
+            if A.SetPerChar then A.SetPerChar("gphAutosellEverything", false) end
         end
     end)
+    cbAutosell:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Autosell EVERYTHING!", 1, 0.8, 0)
+        GameTooltip:AddLine("Automatically sells all unprotected items (including equipment, materials, and consumables) of RARE quality or lower when opening a vendor merchant.\n\nType: [Per Character]", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cbAutosell:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local cbProtectWorn = CreateFrame("CheckButton", "FugaziBAGSProtectWornCheck", panel, "OptionsCheckButtonTemplate")
+    cbProtectWorn:SetPoint("LEFT", cbAutosell, "RIGHT", 180, 0)
+    SkinCheckBox(cbProtectWorn)
+    _G["FugaziBAGSProtectWornCheckText"]:SetText("Protect Previously Worn")
+    cbProtectWorn:SetScript("OnClick", function(self)
+        if A.SetPerChar then
+            A.SetPerChar("gphProtectPreviouslyWorn", self:GetChecked() == 1 or self:GetChecked() == true)
+            if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+            if _G.RefreshBankUI then _G.RefreshBankUI() end
+        end
+    end)
+    cbProtectWorn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Protect Previously Worn", 1, 0.8, 0)
+        GameTooltip:AddLine("Protects equipment that this character has previously worn from accidentally being vendored, disenchanted, or deleted.\n\nType: [Per Character]", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cbProtectWorn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local cbAutoQuest = CreateFrame("CheckButton", "FugaziBAGSAutoQuestGossipCheck", panel, "OptionsCheckButtonTemplate")
+    cbAutoQuest:SetPoint("TOPLEFT", cbAutosell, "BOTTOMLEFT", 0, -8)
+    SkinCheckBox(cbAutoQuest)
+    _G["FugaziBAGSAutoQuestGossipCheckText"]:SetText("Auto Quest / Gossip")
+    cbAutoQuest:SetScript("OnClick", function(self)
+        local SV = _G.FugaziBAGSDB
+        if SV then SV.gphAutoQuestGossip = (self:GetChecked() == 1 or self:GetChecked() == true) end
+    end)
+    cbAutoQuest:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Auto Quest / Gossip", 1, 0.8, 0)
+        GameTooltip:AddLine("Automatically accepts/turns in quests and bypasses standard NPC gossip text.\n\nType: [Account Wide]", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cbAutoQuest:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local cbSound = CreateFrame("CheckButton", "FugaziBAGSClickSoundCheck", panel, "OptionsCheckButtonTemplate")
     cbSound:SetPoint("TOPLEFT", cbDel, "BOTTOMLEFT", 0, -8)
@@ -457,6 +506,13 @@ local function CreateOptionsPanel()
         local SV = _G.FugaziBAGSDB
         if SV then SV.gphClickSound = (self:GetChecked() == 1 or self:GetChecked() == true) end
     end)
+    cbSound:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Play sounds", 1, 0.8, 0)
+        GameTooltip:AddLine("Plays sound effects when interacting with the addons UI.\n\nType: [Account Wide]", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cbSound:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Character Copy Section
     local copyLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -829,7 +885,9 @@ local function CreateOptionsPanel()
             _G.FugaziBAGSScrollStepEdit:SetText(tostring(step))
         end
         if cbSound then cbSound:SetChecked(SV.gphClickSound ~= false) end
-        if cbAutosell then cbAutosell:SetChecked(SV.gphAutosellEverything == true) end
+        if cbAutosell then cbAutosell:SetChecked(A.GetPerChar and A.GetPerChar("gphAutosellEverything", false) == true) end
+        if cbProtectWorn then cbProtectWorn:SetChecked(A.GetPerChar and A.GetPerChar("gphProtectPreviouslyWorn", true) ~= false) end
+        if cbAutoQuest then cbAutoQuest:SetChecked(SV.gphAutoQuestGossip ~= false) end
         if FugaziBAGSDelListSearch then FugaziBAGSDelListSearch:SetText("") end
         RefreshDelListPanel()
     end
@@ -939,13 +997,13 @@ local function CreateGridviewOptionsPanel()
     local function ResetScaleDefaults()
         local SV = _G.FugaziBAGSDB
         if not SV then return end
-        SV.gridCols = 10
-        SV.gridSlotSize = 30
+        SV.gridCols = 11
+        SV.gridSlotSize = 36
         SV.gphFrameScale = 1.00
         SV.gridSpacing = 4
-        SV.gridBorderSize = 2
-        SV.gridGlowAlpha = 0.35
-        SV.gridProtDesat = 0.80
+        SV.gridBorderSize = 3
+        SV.gridGlowAlpha = 0.80
+        SV.gridProtDesat = 0.35
         SV.gridProtectedKeyAlpha = 0.20
         SV.gphFrameAlpha = 0.95
         panel.refresh()
@@ -1075,7 +1133,7 @@ local function CreateSkinsPanel()
             if info then
                 info.text = opt.text
                 info.value = opt.value
-                info.checked = ((_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphSkin) or "original") == opt.value
+                info.checked = ((_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphSkin) or "elvui_real") == opt.value
                 info.func = function()
                     local SV = _G.FugaziBAGSDB
                     if SV then
@@ -1187,9 +1245,9 @@ local function CreateSkinsPanel()
         { key = "fitRowColor",       label = "FIT row label text" },
     }
     local function GetSkinDefaultColor(skinName, key)
-        local sk = _G.__FugaziBAGS_Skins and _G.__FugaziBAGS_Skins.SKIN and _G.__FugaziBAGS_Skins.SKIN[skinName or "original"]
+        local sk = _G.__FugaziBAGS_Skins and _G.__FugaziBAGS_Skins.SKIN and _G.__FugaziBAGS_Skins.SKIN[skinName or "elvui_real"]
         if sk and sk[key] then return unpack(sk[key]) end
-        if key == "mainBg" then return 0.08, 0.08, 0.12, 0.92 end
+        if key == "mainBg" then return 0.04, 0.04, 0.04, 1 end 
         if key == "headerTextColor" and sk and sk.titleTextColor then return unpack(sk.titleTextColor) end
         if key == "fitRowColor" then return 0.5, 0.8, 1.0, 1 end 
         return 1, 0.85, 0.4, 1
@@ -1199,7 +1257,7 @@ local function CreateSkinsPanel()
         if not SV then return end
         if not SV.gphSkinOverrides then SV.gphSkinOverrides = {} end
         local cur = SV.gphSkinOverrides[overrideKey]
-        local skinName = SV.gphSkin or "original"
+        local skinName = SV.gphSkin or "elvui_real"
         local r, g, b, a
         if cur and #cur >= 4 then
             r, g, b, a = cur[1], cur[2], cur[3], cur[4]
@@ -1219,7 +1277,7 @@ local function CreateSkinsPanel()
             local nr, ng, nb = _G.ColorPickerFrame:GetColorRGB()
             local SV2 = _G.FugaziBAGSDB
             if not SV2.gphSkinOverrides then SV2.gphSkinOverrides = {} end
-            local skinNameNow = SV2.gphSkin or "original"
+            local skinNameNow = SV2.gphSkin or "elvui_real"
             local na
             if overrideKey == "mainBg" then
                 if _G.OpacitySliderFrame then
@@ -1457,7 +1515,7 @@ local function CreateSkinsPanel()
 
     panel.refresh = function()
         local SV = _G.FugaziBAGSDB or {}
-        local sk = SV.gphSkin or "original"
+        local sk = SV.gphSkin or "elvui_real"
         local skText = (sk == "elvui" and "Elvui (Ebonhold)") or (sk == "elvui_real" and "ElvUI") or (sk == "pimp_purple" and "Pimp Purple") or (sk == "fugazi" and "FUGAZI") or "Original"
         UIDropDownMenu_SetSelectedValue(skinDropdown, sk)
         UIDropDownMenu_SetText(skinDropdown, skText)
@@ -1590,6 +1648,7 @@ local function CreateInstructionsPanel()
         " - |cff40c0ffRight-Click the Inventory Header|r to open the |cff40c0ffFugaziBAGS|r menu.",
         " - The |cffff6060Autodeleted list|r is per character. You can copy it from another toon in the FugaziBAGS options.",
         " - Items can be removed from the |cffff6060autodelete list|r via |cff40c0fflist view|r in inventory or the Escape Menu.",
+        " - The |cffff6060Keyring and Bags|r can be accessed via |cff40c0ffCtrl Clicking|r the Bagspace indicator in inventory .",
         "",
         "|cffffe070Item protection:|r",
         " - |cff40c0ffAlt+Left-Click|r an item (list or grid): Toggle |cff40c0ffProtected|r status on that item.",

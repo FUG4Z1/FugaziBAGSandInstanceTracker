@@ -992,7 +992,7 @@ RefreshBankUI = function()
         if bf.gphGridMode then
             bf.bankSortBtn.icon:SetTexture("Interface\\Icons\\INV_Misc_Gem_Amethyst_01")
         else
-            local mode = (_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphSortMode) or "rarity"
+            local mode = (_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphSortMode) or "category"
             if mode == "vendor" then bf.bankSortBtn.icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
             elseif mode == "itemlevel" then bf.bankSortBtn.icon:SetTexture("Interface\\Icons\\INV_Misc_EngGizmos_19")
             elseif mode == "category" then bf.bankSortBtn.icon:SetTexture("Interface\\Icons\\INV_Chest_Chain_04")
@@ -1084,7 +1084,7 @@ RefreshBankUI = function()
     if _G.ApplyBankCustomize then _G.ApplyBankCustomize(bf) end
 	
 	local SV = _G.FugaziBAGSDB or {}
-	local sortMode = SV.gphSortMode or "rarity"
+	local sortMode = SV.gphSortMode or "category"
 	if sortMode == "vendor" then
 		table.sort(slotList, A.GPH_Sort_Vendor)
 	elseif sortMode == "itemlevel" then
@@ -1632,7 +1632,7 @@ local function StealthHideElvUIBank()
                 f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -5000, -5000)
                 f:SetAlpha(0)
                 f:EnableMouse(false)
-                if not f._TestStealthHook and hooksecurefunc then
+                  if not f._TestStealthHook and hooksecurefunc then
                     f._TestStealthHook = true
                     hooksecurefunc(f, "Show", function()
                         if f and f.ClearAllPoints then
@@ -1640,6 +1640,20 @@ local function StealthHideElvUIBank()
                             f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -5000, -5000)
                             f:SetAlpha(0)
                             f:EnableMouse(false)
+                        end
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local bf_gph = A.Bank
+                            if bf_gph and not bf_gph:IsShown() then
+                                if A.doShowFugaziBank then A.doShowFugaziBank() end
+                            end
+                        end
+                    end)
+                    hooksecurefunc(f, "Hide", function()
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local bf_gph = A.Bank
+                            if bf_gph and bf_gph:IsShown() then
+                                bf_gph:Hide()
+                            end
                         end
                     end)
                 end
@@ -1658,6 +1672,35 @@ local function StealthHideElvUIBank()
                             bf:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -5000, -5000)
                             bf:SetAlpha(0)
                             bf:EnableMouse(false)
+                        end
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local gf = A.Inventory
+                            local container = gf and gf.gphInventoryContainer
+                            if container then
+                                if not container:IsShown() then
+                                    if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                end
+                            elseif gf and not gf:IsShown() then
+                                if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                            end
+                        end
+                    end)
+                    hooksecurefunc(bf, "Hide", function()
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local atVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
+                            local atMailbox = _G.MailFrame and _G.MailFrame:IsShown()
+                            local atAH = _G.AuctionFrame and _G.AuctionFrame:IsShown()
+                            if not (atVendor or atMailbox or atAH) then
+                                local gf = A.Inventory
+                                local container = gf and gf.gphInventoryContainer
+                                if container then
+                                    if container:IsShown() then
+                                        if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                    end
+                                elseif gf and gf:IsShown() then
+                                    if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                end
+                            end
                         end
                     end)
                 end

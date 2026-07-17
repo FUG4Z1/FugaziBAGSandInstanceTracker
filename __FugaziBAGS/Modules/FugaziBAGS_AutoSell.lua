@@ -152,8 +152,7 @@ local function BuildGphVendorQueue()
                     local texture, itemCount, locked = GetContainerItemInfo(bag, slot)
                     if itemCount and itemCount > 0 and not locked then
                         local sellPrice = select(11, A.GetCachedItemInfo(link or itemID))
-                        local SV = _G.FugaziBAGSDB
-                        local maxQualityAllowed = (SV and SV.gphAutosellEverything) and 3 or 0
+                        local maxQualityAllowed = (A.GetPerChar and A.GetPerChar("gphAutosellEverything", false) == true) and 3 or 0
                         if sellPrice and sellPrice > 0 and quality <= maxQualityAllowed then
                             gphVendorQueue[#gphVendorQueue + 1] = { type = "sell", bag = bag, slot = slot, itemID = itemID }
                         end
@@ -196,8 +195,7 @@ gphVendorWorker:SetScript("OnUpdate", function(self, elapsed)
         local _, _, quality
         if link then _, _, quality = A.GetCachedItemInfo(link) end
         if quality == nil then _, _, quality = A.GetCachedItemInfo(action.itemID) end
-        local SV = _G.FugaziBAGSDB
-        local maxQualityAllowed = (SV and SV.gphAutosellEverything) and 3 or 0
+        local maxQualityAllowed = (A.GetPerChar and A.GetPerChar("gphAutosellEverything", false) == true) and 3 or 0
         local neverSell = (quality > maxQualityAllowed)
         local count = 1
         if GetContainerItemInfo then
@@ -372,15 +370,13 @@ StaticPopupDialogs["GPH_AUTOSELL_EVERYTHING_WARN"] = {
     button1 = "Enable",
     button2 = "Cancel",
     OnAccept = function()
-        local SV = _G.FugaziBAGSDB
-        if SV then SV.gphAutosellEverything = true end
+        if A.SetPerChar then A.SetPerChar("gphAutosellEverything", true) end
         if _G.FugaziBAGSAutosellEverythingCheck then
             _G.FugaziBAGSAutosellEverythingCheck:SetChecked(true)
         end
     end,
     OnCancel = function()
-        local SV = _G.FugaziBAGSDB
-        if SV then SV.gphAutosellEverything = false end
+        if A.SetPerChar then A.SetPerChar("gphAutosellEverything", false) end
         if _G.FugaziBAGSAutosellEverythingCheck then
             _G.FugaziBAGSAutosellEverythingCheck:SetChecked(false)
         end

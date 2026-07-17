@@ -106,6 +106,14 @@ function A.HandleBagSlotEnter(frame, silent, hostWindow)
     if canonical.bagHighlight then canonical.bagHighlight:Show() end
     if not silent and not wasHighlighted and A.PlayHoverSound then A.PlayHoverSound() end
 
+    -- 2.1 MERCHANT CURSOR
+    if _G.MerchantFrame and _G.MerchantFrame:IsShown() and not isBank then
+        local fn = _G.ShowContainerSellCursor or (_G.C_Container and _G.C_Container.ShowContainerSellCursor)
+        if fn then
+            fn(bag, slot)
+        end
+    end
+
     -- 3. CONTENT UPDATE (Safe to call repeatedly, the shield handles the anchoring)
     if bag == -1 then
         local invSlot = (BankButtonIDToInvSlotID and BankButtonIDToInvSlotID(slot)) or (38 + slot)
@@ -137,9 +145,9 @@ function A.HandleBagSlotEnter(frame, silent, hostWindow)
         
         -- 4.1. Dynamic Modifier Overlay Activation (Harmonize with List Mode)
         local modOv = canonical._fugaziModifierOverlay
+        local altDown = IsAltKeyDown()
+        local ctrlDown = IsControlKeyDown()
         if modOv then
-            local altDown = IsAltKeyDown()
-            local ctrlDown = IsControlKeyDown()
             if (altDown or ctrlDown) and not (altDown and ctrlDown) then
                 modOv:Show()
                 modOv:EnableMouse(true)
@@ -156,6 +164,10 @@ end
 
 function A.HandleBagSlotLeave(frame)
     if frame.bagHighlight then frame.bagHighlight:Hide() end
+    
+    if _G.MerchantFrame and _G.MerchantFrame:IsShown() and _G.ResetCursor then
+        _G.ResetCursor()
+    end
     
     -- CLEANING GUARD: If the factory is currently recycling frames, ignore the OnLeave hide.
     -- This prevents the tooltip from flickering out when its owner frame is hidden/moved.
@@ -238,6 +250,13 @@ function A.HandleBagSlotClick(frame, button, down)
     if button == "LeftButton" then
         PickupContainerItem(bag, slot)
     elseif button == "RightButton" then
+        if _G.MerchantFrame and _G.MerchantFrame:IsShown() then
+            local link = GetContainerItemLink(bag, slot)
+            local itemId = link and tonumber(link:match("item:(%d+)"))
+            if itemId and A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId) then
+                return
+            end
+        end
         UseContainerItem(bag, slot)
     end
 end

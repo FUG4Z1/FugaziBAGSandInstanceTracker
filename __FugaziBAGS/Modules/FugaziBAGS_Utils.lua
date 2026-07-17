@@ -673,10 +673,10 @@ end
 
 local function GetActiveSkinBorderColor()
     local SV = _G.FugaziBAGSDB
-    local val = SV and SV.gphSkin or "original"
+    local val = SV and SV.gphSkin or "elvui_real"
     local Skins = _G.__FugaziBAGS_Skins
     local SKIN = Skins and Skins.SKIN or {}
-    local s = SKIN[val] or SKIN.original
+    local s = SKIN[val] or SKIN.elvui_real or SKIN.original
     if s and s.mainBorder then
         return unpack(s.mainBorder)
     end
@@ -710,6 +710,9 @@ local function SetPerChar(key, value)
     if not SV.gphPerChar[k] then SV.gphPerChar[k] = {} end
     SV.gphPerChar[k][key] = value
 end
+
+A.GetPerChar = GetPerChar
+A.SetPerChar = SetPerChar
 
 --- Apply frame transparency (like UI opacity slider).
 function A.ApplyFrameAlpha(f)

@@ -213,12 +213,12 @@ end
 
 local function ResolveSkinName()
     local SV = _G.FugaziBAGSDB
-    local val = SV and SV.gphSkin or "original"
+    local val = SV and SV.gphSkin or "elvui_real"
     if val == "fugazi" then return "fugazi" end
     if val == "elvui_real" then return "elvui_real" end
     if val == "elvui" then return "elvui" end
     if val == "pimp_purple" then return "pimp_purple" end
-    return "original"
+    return "elvui_real"
 end
 
 --- Adds a 1px border around a button using the given color (used for Search, bag space, and bank bag space so they match).

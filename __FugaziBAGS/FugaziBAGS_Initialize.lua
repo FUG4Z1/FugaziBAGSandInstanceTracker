@@ -179,6 +179,20 @@ function A.StealthHideElvUIBank()
                             f:SetAlpha(0)
                             f:EnableMouse(false)
                         end
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local bf_gph = A.Bank
+                            if bf_gph and not bf_gph:IsShown() then
+                                if A.doShowFugaziBank then A.doShowFugaziBank() end
+                            end
+                        end
+                    end)
+                    hooksecurefunc(f, "Hide", function()
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local bf_gph = A.Bank
+                            if bf_gph and bf_gph:IsShown() then
+                                bf_gph:Hide()
+                            end
+                        end
                     end)
                 end
             end
@@ -196,6 +210,35 @@ function A.StealthHideElvUIBank()
                             bf:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -5000, -5000)
                             bf:SetAlpha(0)
                             bf:EnableMouse(false)
+                        end
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local gf = A.Inventory
+                            local container = gf and gf.gphInventoryContainer
+                            if container then
+                                if not container:IsShown() then
+                                    if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                end
+                            elseif gf and not gf:IsShown() then
+                                if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                            end
+                        end
+                    end)
+                    hooksecurefunc(bf, "Hide", function()
+                        if _G.FugaziBAGS_AddonEnabled ~= false then
+                            local atVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
+                            local atMailbox = _G.MailFrame and _G.MailFrame:IsShown()
+                            local atAH = _G.AuctionFrame and _G.AuctionFrame:IsShown()
+                            if not (atVendor or atMailbox or atAH) then
+                                local gf = A.Inventory
+                                local container = gf and gf.gphInventoryContainer
+                                if container then
+                                    if container:IsShown() then
+                                        if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                    end
+                                elseif gf and gf:IsShown() then
+                                    if A.ToggleGPHFrame then A.ToggleGPHFrame() end
+                                end
+                            end
                         end
                     end)
                 end

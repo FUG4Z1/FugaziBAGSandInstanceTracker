@@ -49,7 +49,6 @@ end
 local function EnsureSecureRowBtn(clickArea, bag, slot)
     local par = clickArea._fugaziSecPar
     local btn = clickArea._fugaziSecBtn
-    local vendorProtectOverlay = clickArea._fugaziVendorProtectOverlay
     local modOverlay = clickArea._fugaziModifierOverlay
 
     -- 1. If we already have the frames, just update them and RETURN
@@ -60,7 +59,6 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
         -- Identity mirroring (for tooltips/hovers)
         par.bag = bag; par.slot = slot
         btn.bag = bag; btn.slot = slot
-        if vendorProtectOverlay then vendorProtectOverlay.bag = bag; vendorProtectOverlay.slot = slot end
         if modOverlay then modOverlay.bag = bag; modOverlay.slot = slot end
         
         -- Update visibility/state if needed
@@ -68,9 +66,25 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
         btn:Show()
         
         -- Ensure children are synced if they exist
-        if vendorProtectOverlay then vendorProtectOverlay:SetParent(par); vendorProtectOverlay:SetAllPoints(par) end
         if modOverlay then modOverlay:SetParent(par); modOverlay:SetAllPoints(par) end
         
+        local isAtVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
+        local isProt = false
+        if isAtVendor and A.IsItemProtectedAPI then
+            local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+            local itemId = link and tonumber(link:match("item:(%d+)"))
+            if itemId and A.IsItemProtectedAPI(itemId) then
+                isProt = true
+            end
+        end
+        if not InCombatLockdown() then
+            if isAtVendor and isProt then
+                btn:RegisterForClicks("LeftButtonUp")
+            else
+                btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            end
+        end
+
         return
     end
 
@@ -115,16 +129,6 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
     end
     btn:SetScript("OnMouseWheel", forwardMouseWheel)
     
-    vendorProtectOverlay = CreateFrame("Button", nil, par)
-    vendorProtectOverlay:SetAllPoints(par)
-    vendorProtectOverlay:SetFrameStrata(par:GetFrameStrata() or "MEDIUM")
-    vendorProtectOverlay:SetFrameLevel((par:GetFrameLevel() or 1) + 5)
-    vendorProtectOverlay:EnableMouse(true)
-    vendorProtectOverlay:RegisterForClicks("RightButtonUp")
-    vendorProtectOverlay:SetScript("OnClick", function() end)
-    vendorProtectOverlay:Hide()
-    vendorProtectOverlay._gphDebugName = "SecureVendorOverlay"
- 
     modOverlay = CreateFrame("Button", nil, par)
     modOverlay:SetAllPoints(par)
     modOverlay:SetFrameStrata(par:GetFrameStrata() or "MEDIUM")
@@ -190,9 +194,25 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
 
     clickArea._fugaziSecBtn = btn
     clickArea._fugaziSecPar = par
-    clickArea._fugaziVendorProtectOverlay = vendorProtectOverlay
     clickArea._fugaziModifierOverlay = modOverlay
     
+    local isAtVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
+    local isProt = false
+    if isAtVendor and A.IsItemProtectedAPI then
+        local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+        local itemId = link and tonumber(link:match("item:(%d+)"))
+        if itemId and A.IsItemProtectedAPI(itemId) then
+            isProt = true
+        end
+    end
+    if not InCombatLockdown() then
+        if isAtVendor and isProt then
+            btn:RegisterForClicks("LeftButtonUp")
+        else
+            btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        end
+    end
+
     par:Show()
     btn:Show()
 end

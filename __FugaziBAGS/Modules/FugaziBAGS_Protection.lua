@@ -12,6 +12,7 @@ end
 
 function A.IsItemWorn(itemId)
     if not itemId then return false end
+    if A.GetPerChar and A.GetPerChar("gphProtectPreviouslyWorn", true) == false then return false end
     local ledger = A.GetGphWornLedger()
     return ledger and ledger[itemId]
 end
@@ -101,8 +102,10 @@ function A.IsItemProtectedAPI(itemId, qualityArg)
     if set and set[itemId] == true then return true end
 
     -- "Previously worn only" check: worn items behave as Protected by default
-    local ledger = A.GetGphWornLedger()
-    if ledger and ledger[itemId] then return true end
+    if A.GetPerChar and A.GetPerChar("gphProtectPreviouslyWorn", true) ~= false then
+        local ledger = A.GetGphWornLedger()
+        if ledger and ledger[itemId] then return true end
+    end
 
     local flags = A.GetGphProtectedRarityFlags and A.GetGphProtectedRarityFlags()
     if not flags then return false end
@@ -202,9 +205,8 @@ function A.HandleGearProtection(currentEquipped, lastEquippedItemIds)
     for id in pairs(lastEquippedItemIds) do
         local itemId = tonumber(id)
         if itemId and not currentEquipped[itemId] then
-            -- A. Unequip = Master Event: Force protection ON (Restore shield icon/status)
+            -- A. Unequip = Master Event: Clear manual unprotect (so it behaves as default/protected)
             mu[itemId] = nil
-            if protected then protected[itemId] = true end
             
             -- B. Register in the Ledger for the 'isPrev' shield and tooltip
             if ledger then ledger[itemId] = true end

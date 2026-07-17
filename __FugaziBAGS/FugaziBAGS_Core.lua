@@ -139,6 +139,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- Global Toggling hook
         if not _G.ToggleGPHFrame then _G.ToggleGPHFrame = A.ToggleGPHFrame end
         if A.InstallGPHInvHook then A.InstallGPHInvHook() end
+        if A.StealthHideElvUIBank then A.StealthHideElvUIBank() end
         
         -- Restore visual state
         A.RestoreFrameLayout(gphFrame, nil, "gphPoint")
@@ -166,9 +167,23 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if event == "BAG_UPDATE" then
             A.ClearBagLinkCache(bagID) 
             A._gphBagSpaceDirty = true
+            if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
+            if A.activeDisenchantSlot and A.activeDisenchantSlot.bag == bagID then
+                local currentID = GetContainerItemID and GetContainerItemID(A.activeDisenchantSlot.bag, A.activeDisenchantSlot.slot)
+                if not currentID then
+                    A.activeDisenchantSlot = nil
+                end
+            end
         else
             A.ClearBagLinkCache(nil) -- Clear all for bank/delayed events
             A._gphBagSpaceDirty = true
+            if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
+            if A.activeDisenchantSlot then
+                local currentID = GetContainerItemID and GetContainerItemID(A.activeDisenchantSlot.bag, A.activeDisenchantSlot.slot)
+                if not currentID then
+                    A.activeDisenchantSlot = nil
+                end
+            end
         end
         
         -- Use debouncing to prevent excessive updates durante looting/banking

@@ -103,6 +103,25 @@ function A.RefreshGPHUI()
     local gphFrame = A.Inventory
     if not gphFrame then return end
     
+    -- Defer refresh while casting Disenchant/Prospecting to prevent frame drops
+    if gphFrame and (A.isDisenchanting or (UnitCastingInfo and UnitCastingInfo("player"))) then
+        if not gphFrame._refreshGPHScheduler then
+            gphFrame._refreshGPHScheduler = CreateFrame("Frame", nil, gphFrame)
+            gphFrame._refreshGPHScheduler:Hide()
+            gphFrame._refreshGPHScheduler:SetScript("OnUpdate", function(self, elapsed)
+                self._timer = (self._timer or 0) + elapsed
+                if self._timer >= 0.1 then
+                    self._timer = 0
+                    self:Hide()
+                    if A.RefreshGPHUI then A.RefreshGPHUI() end
+                end
+            end)
+        end
+        gphFrame._refreshGPHScheduler._timer = 0
+        gphFrame._refreshGPHScheduler:Show()
+        return
+    end
+    
     if A.RefreshGPHBagRow then A.RefreshGPHBagRow(gphFrame) end
     local DB = _G.FugaziBAGSDB or {}
     local gphSession = _G.gphSession
@@ -362,7 +381,7 @@ function A.RefreshGPHUI()
 
     local yOff = 4  
     gphFrame.gphHomebaseRowY = yOff
-    local sortMode = DB.gphSortMode or "rarity"
+    local sortMode = DB.gphSortMode or "category"
 
     -- ASCENSION NOTE: The standard GetItemInfo API on Ascension returns incorrect/base 
     -- Price and ItemLevel data for many scaled items. Sorting by these values is 

@@ -52,10 +52,10 @@ local pairs = _G.pairs
 
 
 local DEFAULTS = {
-    gridCols = 10, gridSlotSize = 30, gridSpacing = 4,
-    gridBorderSize = 2, gridGlowAlpha = 0.35,
-    gridProtDesat = 0.80, gridConfirmAutoDel = true,
-    gridProtectedKeyAlpha = 0.2,
+    gridCols = 11, gridSlotSize = 36, gridSpacing = 4,
+    gridBorderSize = 3, gridGlowAlpha = 0.80,
+    gridProtDesat = 0.35, gridConfirmAutoDel = true,
+    gridProtectedKeyAlpha = 0.20,
 }
 
 local BAG_IDS         = { 0, 1, 2, 3, 4, -2 }

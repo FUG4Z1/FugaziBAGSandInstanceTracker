@@ -360,56 +360,76 @@ local function GPHIsDestroyable(bag, slot, link)
 end
 A.GPHIsDestroyable = GPHIsDestroyable
 
+local cachedList = nil
+local cacheDirty = true
+
+function A.DirtyDestroyableCache()
+    cacheDirty = true
+end
+
 --- First destroyable item in bags (for continuous delete; optional prospect priority).
 local function GetFirstDestroyableInBags(preferProspect)
     local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
     local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
-    local list = {}
-    for bag = 0, 4 do
-        local numSlots = GetContainerNumSlots and GetContainerNumSlots(bag)
-        if numSlots then
-            for slot = 1, numSlots do
-                local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-                if link then
-                    local spell = GPHIsDestroyable(bag, slot, link)
-                    if spell then
-                        local itemId = tonumber(link:match("item:(%d+)"))
-                        local name, _, quality, iLevel, reqLevel = A.GetCachedItemInfo(link)
-                        quality = quality or 0
-                        if itemId and A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, quality) then
-                        else
-                            table.insert(list, {
-                                bag = bag,
-                                slot = slot,
-                                spell = spell,
-                                isDE = spell:find("Disenchant", 1, true),
-                                quality = quality,
-                                reqLevel = reqLevel or 0,
-                                iLevel = iLevel or 0,
-                                link = link,
-                            })
+    
+    if cacheDirty or not cachedList then
+        cachedList = {}
+        for bag = 0, 4 do
+            local numSlots = GetContainerNumSlots and GetContainerNumSlots(bag)
+            if numSlots then
+                for slot = 1, numSlots do
+                    local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+                    if link then
+                        local spell = GPHIsDestroyable(bag, slot, link)
+                        if spell then
+                            local itemId = tonumber(link:match("item:(%d+)"))
+                            local name, _, quality, iLevel, reqLevel = A.GetCachedItemInfo(link)
+                            quality = quality or 0
+                            if itemId and A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, quality) then
+                            else
+                                table.insert(cachedList, {
+                                    bag = bag,
+                                    slot = slot,
+                                    spell = spell,
+                                    isDE = spell:find("Disenchant", 1, true),
+                                    quality = quality,
+                                    reqLevel = reqLevel or 0,
+                                    iLevel = iLevel or 0,
+                                    link = link,
+                                    itemId = itemId,
+                                })
+                            end
                         end
                     end
                 end
             end
         end
+        
+        table.sort(cachedList, function(a, b)
+            local ar, br = a.reqLevel or 0, b.reqLevel or 0
+            if ar ~= br then return ar < br end
+            local ai, bi = a.iLevel or 0, b.iLevel or 0
+            return ai < bi
+        end)
+        
+        cacheDirty = false
     end
-    if #list == 0 then return nil end
     
-    table.sort(list, function(a, b)
-        local ar, br = a.reqLevel or 0, b.reqLevel or 0
-        if ar ~= br then return ar < br end
-        local ai, bi = a.iLevel or 0, b.iLevel or 0
-        return ai < bi
-    end)
+    if #cachedList == 0 then return nil end
+    
+    local active = A.activeDisenchantSlot
+    
     local function pick(deFirst)
-        for i = 1, #list do
-            local e = list[i]
-            if deFirst and e.isDE then return e.bag, e.slot, e.spell, e.link end
-            if not deFirst and not e.isDE then return e.bag, e.slot, e.spell, e.link end
+        for i = 1, #cachedList do
+            local e = cachedList[i]
+            if not (active and active.bag == e.bag and active.slot == e.slot) then
+                if deFirst and e.isDE then return e.bag, e.slot, e.spell, e.link end
+                if not deFirst and not e.isDE then return e.bag, e.slot, e.spell, e.link end
+            end
         end
         return nil
     end
+    
     if preferProspect and hasProspect then
         local b, s, sp, link = pick(false)
         if b then return b, s, sp, link end
@@ -422,6 +442,14 @@ local function GetFirstDestroyableInBags(preferProspect)
         local b, s, sp, link = pick(false)
         if b then return b, s, sp, link end
     end
+    
+    for i = 1, #cachedList do
+        local e = cachedList[i]
+        if not (active and active.bag == e.bag and active.slot == e.slot) then
+            return e.bag, e.slot, e.spell, e.link
+        end
+    end
+    
     return nil
 end
 A.GetFirstDestroyableInBags = GetFirstDestroyableInBags
@@ -570,6 +598,7 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "LOOT_CLOSED" then
         A.isDisenchanting = nil
+        if A.RefreshGPHUI then A.RefreshGPHUI() end
     elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
         local unit, spellName = ...
         if unit == "player" then
@@ -577,6 +606,8 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
             local pr = GetSpellInfo(31252) or "Prospecting"
             if spellName == de or spellName == pr then
                 A.isDisenchanting = nil
+                A.activeDisenchantSlot = nil
+                if A.RefreshGPHUI then A.RefreshGPHUI() end
             end
         end
     end
