@@ -512,9 +512,11 @@ function A.GPHQualBtn_OnClick(self, button)
 
     if shift and button == "RightButton" and (self.currentCount or 0) > 0 then
         local bf = A.Bank
+        local gbf = _G.GuildBankFrame
         local mf = _G.MailFrame
-        if bf and bf:IsShown() then
-            A.RarityMoveJob = { mode = "bags_to_bank", rarity = self.quality }
+        if (bf and bf:IsShown()) or (gbf and gbf:IsShown()) then
+            local mode = (gbf and gbf:IsShown()) and "bags_to_guildbank" or "bags_to_bank"
+            A.RarityMoveJob = { mode = mode, rarity = self.quality }
             if A.RarityMoveWorker then A.RarityMoveWorker._t = 0; A.RarityMoveWorker:Show() end
         elseif mf and mf:IsShown() then
             local recipient = _G.SendMailNameEditBox and _G.SendMailNameEditBox:GetText()

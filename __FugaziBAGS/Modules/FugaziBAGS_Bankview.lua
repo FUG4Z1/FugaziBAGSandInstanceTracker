@@ -1536,24 +1536,30 @@ end
 _G.RefreshBankUI = RefreshBankUI
 A.RefreshBankUI = RefreshBankUI
 
+local bankRefreshScheduler = CreateFrame("Frame")
+bankRefreshScheduler:Hide()
+bankRefreshScheduler._t = 0
+
 --- Schedule bank UI refresh with a small buffer to handle server latency.
 function FugaziBAGS_ScheduleRefreshBankUI()
-	local f = CreateFrame("Frame")
-	f._t = 0
-	f:SetScript("OnUpdate", function(self, elapsed)
-		self._t = (self._t or 0) + elapsed
-		if self._t < 0.15 then return end
-		self:SetScript("OnUpdate", nil)
-		self:Hide()
-		local bf = A.Bank
-		
-		if not bf or not bf:IsShown() then return end
-		if RefreshBankUI then RefreshBankUI() end
-		
-		if bf.gphGridMode and _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.BankRefreshSlots then
-			_G.FugaziBAGS_CombatGrid.BankRefreshSlots()
-		end
-	end)
+    bankRefreshScheduler._t = 0
+    if not bankRefreshScheduler:IsShown() then
+        bankRefreshScheduler:Show()
+        bankRefreshScheduler:SetScript("OnUpdate", function(self, elapsed)
+            self._t = self._t + elapsed
+            if self._t < 0.15 then return end
+            self:SetScript("OnUpdate", nil)
+            self:Hide()
+            
+            local bf = A.Bank
+            if not bf or not bf:IsShown() then return end
+            if RefreshBankUI then RefreshBankUI() end
+            
+            if bf.gphGridMode and _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.BankRefreshSlots then
+                _G.FugaziBAGS_CombatGrid.BankRefreshSlots()
+            end
+        end)
+    end
 end
 _G.FugaziBAGS_ScheduleRefreshBankUI = FugaziBAGS_ScheduleRefreshBankUI
 
@@ -1690,7 +1696,8 @@ local function StealthHideElvUIBank()
                             local atVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
                             local atMailbox = _G.MailFrame and _G.MailFrame:IsShown()
                             local atAH = _G.AuctionFrame and _G.AuctionFrame:IsShown()
-                            if not (atVendor or atMailbox or atAH) then
+                            local atBank = (A.Bank and A.Bank:IsShown()) or (_G.BankFrame and _G.BankFrame:IsShown())
+                            if not (atVendor or atMailbox or atAH or atBank) then
                                 local gf = A.Inventory
                                 local container = gf and gf.gphInventoryContainer
                                 if container then
@@ -1725,6 +1732,24 @@ end
 A.StealthHideElvUIBank = StealthHideElvUIBank
 
 
+local bankOpenRetryFrame = CreateFrame("Frame")
+bankOpenRetryFrame:Hide()
+bankOpenRetryFrame._t = 0
+bankOpenRetryFrame._retryCount = 0
+bankOpenRetryFrame:SetScript("OnUpdate", function(self, elapsed)
+    self._t = self._t + elapsed
+    if self._t < 0.2 then return end
+    self._t = 0
+    self._retryCount = self._retryCount + 1
+    if RefreshBankUI then RefreshBankUI() end
+    
+    local used = A.Bank and A.Bank._bankUsedSlots or 0
+    if used > 0 or self._retryCount >= 5 then
+        self:Hide()
+    end
+end)
+
+
 local function doShowFugaziBank()
     local bf = A.Bank
     if bf and bf:IsShown() and (GetTime() - (bf._lastShowTime or 0)) < 0.1 then return end
@@ -1754,10 +1779,14 @@ local function doShowFugaziBank()
         A.Bank = bf
         bf._lastShowTime = GetTime()
         bf.gphScrollToDefaultOnNextRefresh = true
+        
         if inv then
             bf:SetParent(inv)
             bf:SetScale(1)
             inv:Show()
+            if inv.gphInventoryContainer then
+                inv.gphInventoryContainer:Show()
+            end
             if _G.RefreshGPHUI then _G.RefreshGPHUI() end
             do
                 local p, r, rp, x, y = inv:GetPoint(1)
@@ -1788,24 +1817,13 @@ local function doShowFugaziBank()
         if bf.bankTitleText then
             bf.bankTitleText:SetText((UnitName and UnitName("target")) or "Bank")
         end
+
         if RefreshBankUI then 
             RefreshBankUI() 
             
-            local retryCount = 0
-            local retryFrame = CreateFrame("Frame")
-            retryFrame:SetScript("OnUpdate", function(self, elapsed)
-                self._t = (self._t or 0) + elapsed
-                if self._t < 0.2 then return end
-                self._t = 0
-                retryCount = retryCount + 1
-                if RefreshBankUI then RefreshBankUI() end
-                
-                local used = A.Bank and A.Bank._bankUsedSlots or 0
-                if used > 0 or retryCount >= 5 then
-                    self:SetScript("OnUpdate", nil)
-                    self:Hide()
-                end
-            end)
+            bankOpenRetryFrame._t = 0
+            bankOpenRetryFrame._retryCount = 0
+            bankOpenRetryFrame:Show()
         end
         
         
@@ -1991,23 +2009,31 @@ end
 A.FindNextFromBank = FindNextFromBank
     
 
---- Next item of given quality in bags (used by the move worker).
-local function FindNextFromBags(rarity)
-    local function qualityMatches(r, q)
-        if q == r then return true end
-        if r == 4 and q >= 4 then return true end
-        return false
-    end
-    for bag = 0, 4 do
-        local slots = GetContainerNumSlots and GetContainerNumSlots(bag) or 0
-        for slot = 1, slots do
-            local _, _, locked = GetContainerItemInfo(bag, slot)
-            local itemId = GetContainerItemID and GetContainerItemID(bag, slot)
-            if itemId and not locked then
-                local _, _, q = A.GetCachedItemInfo(itemId)
-                q = q or 0
-                if qualityMatches(rarity, q) and not A.RarityIsProtected(itemId, q) then
-                    return bag, slot
+--- Next item of given quality or category in bags (used by the move worker).
+local function FindNextFromBags(rarity, categoryName)
+    local items = A.GetCachedBagItems and A.GetCachedBagItems()
+    if not items then return nil, nil end
+    for i = 1, #items do
+        local e = items[i]
+        local _, _, locked = GetContainerItemInfo(e.bag, e.slot)
+        if not locked and not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(e.itemId, e.quality)) then
+            if categoryName then
+                local itemCat = "Other"
+                if e.itemId == A.HEARTHSTONE_ID then itemCat = "HIDDEN_FIRST"
+                elseif A.IsQuestItem and A.IsQuestItem(e.link) then itemCat = "Quest"
+                elseif e.quality == 0 then itemCat = "Miscellaneous"
+                else
+                    local name, _, quality, _, _, giType, giSubType = A.GetCachedItemInfo(e.link)
+                    if giSubType == "Reagent" then itemCat = "Trade Goods"
+                    else itemCat = (giType and giType ~= "" and giType) or "Other" end
+                end
+                if itemCat == categoryName then
+                    return e.bag, e.slot
+                end
+            elseif rarity then
+                local q = e.quality or 0
+                if q == rarity or (rarity == 4 and q >= 4) then
+                    return e.bag, e.slot
                 end
             end
         end
@@ -2030,6 +2056,40 @@ rarityMoveWorker:SetScript("OnUpdate", function(self, elapsed)
     if self._t < 0.1 then return end
     self._t = 0
 
+    if job.mode == "bags_to_guildbank" then
+        if not _G.GuildBankFrame or not _G.GuildBankFrame:IsShown() then
+            A.RarityMoveJob = nil
+            ClearCursor()
+            self:Hide()
+            return
+        end
+        local srcBag, srcSlot = FindNextFromBags(job.rarity, job.category)
+        if not srcBag or not srcSlot then
+            A.RarityMoveJob = nil
+            self:Hide()
+            return
+        end
+        UseContainerItem(srcBag, srcSlot)
+        return
+    end
+
+    if job.mode == "bags_to_mail" then
+        if not _G.MailFrame or not _G.MailFrame:IsShown() then
+            A.RarityMoveJob = nil
+            ClearCursor()
+            self:Hide()
+            return
+        end
+        local srcBag, srcSlot = FindNextFromBags(job.rarity, job.category)
+        if not srcBag or not srcSlot then
+            A.RarityMoveJob = nil
+            self:Hide()
+            return
+        end
+        UseContainerItem(srcBag, srcSlot)
+        return
+    end
+
     local bankFrame = A.Bank
     
     if not bankFrame or not bankFrame:IsShown() or not bankFrame.GetFirstFreeBankSlot or not bankFrame.GetFirstFreeBagSlot then
@@ -2041,7 +2101,7 @@ rarityMoveWorker:SetScript("OnUpdate", function(self, elapsed)
 
     local srcBag, srcSlot
     if job.mode == "bags_to_bank" then
-        srcBag, srcSlot = FindNextFromBags(job.rarity)
+        srcBag, srcSlot = FindNextFromBags(job.rarity, job.category)
     else
         srcBag, srcSlot = A.FindNextFromBank(job.rarity)
     end

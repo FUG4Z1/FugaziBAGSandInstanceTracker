@@ -55,8 +55,13 @@ eventFrame:SetScript("OnUpdate", function(self, elapsed)
     -- 1. Throttled UI Refreshes & Destroyer Scans (Debouncing events)
     if isRefreshPending or isBankRefreshPending or isDestroyerScanPending then
         self.throttle = (self.throttle or 0) + elapsed
-        if self.throttle >= 0.05 then
+        if self.throttle >= 0.15 then
             self.throttle = 0
+            
+            -- Skip UI redraws while Auto-Sell is actively processing items
+            if A.isAutoSelling then
+                return
+            end
             
             -- If it was ONLY a cooldown update, we can skip the expensive list layout
             -- if the list view is active (which handles cooldowns via its own OnUpdate).
@@ -168,9 +173,23 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             A.ClearBagLinkCache(bagID) 
             A._gphBagSpaceDirty = true
             if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
+            if A.lockedDisenchantSlots then
+                for key, lockTime in pairs(A.lockedDisenchantSlots) do
+                    local bag, slot = key:match("^(%d+)_(%d+)$")
+                    if bag and slot then
+                        bag, slot = tonumber(bag), tonumber(slot)
+                        if bag == bagID then
+                            local currentID = GetContainerItemID and GetContainerItemID(bag, slot)
+                            if not currentID then
+                                A.lockedDisenchantSlots[key] = nil
+                            end
+                        end
+                    end
+                end
+            end
             if A.activeDisenchantSlot and A.activeDisenchantSlot.bag == bagID then
                 local currentID = GetContainerItemID and GetContainerItemID(A.activeDisenchantSlot.bag, A.activeDisenchantSlot.slot)
-                if not currentID then
+                if not currentID or currentID ~= A.activeDisenchantSlot.itemId then
                     A.activeDisenchantSlot = nil
                 end
             end
@@ -178,9 +197,21 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             A.ClearBagLinkCache(nil) -- Clear all for bank/delayed events
             A._gphBagSpaceDirty = true
             if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
+            if A.lockedDisenchantSlots then
+                for key, lockTime in pairs(A.lockedDisenchantSlots) do
+                    local bag, slot = key:match("^(%d+)_(%d+)$")
+                    if bag and slot then
+                        bag, slot = tonumber(bag), tonumber(slot)
+                        local currentID = GetContainerItemID and GetContainerItemID(bag, slot)
+                        if not currentID then
+                            A.lockedDisenchantSlots[key] = nil
+                        end
+                    end
+                end
+            end
             if A.activeDisenchantSlot then
                 local currentID = GetContainerItemID and GetContainerItemID(A.activeDisenchantSlot.bag, A.activeDisenchantSlot.slot)
-                if not currentID then
+                if not currentID or currentID ~= A.activeDisenchantSlot.itemId then
                     A.activeDisenchantSlot = nil
                 end
             end

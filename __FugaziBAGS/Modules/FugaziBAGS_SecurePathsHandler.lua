@@ -231,6 +231,9 @@ function A.ToggleGPHFrame()
             gphFrame.gphSelectedItemId = nil
             gphFrame.gphSelectedItemLink = nil
             container:Hide()
+            if A.Bank and A.Bank:IsShown() then
+                _G.CloseBankFrame()
+            end
         else
             local SV = _G.FugaziBAGSDB
             if not (SV and SV.gphPoint and SV.gphPoint.point) then
@@ -261,6 +264,9 @@ function A.ToggleGPHFrame()
             gphFrame.gphSelectedRowBtn = nil
             gphFrame.gphSelectedItemId = nil
             gphFrame.gphSelectedItemLink = nil
+            if A.Bank and A.Bank:IsShown() then
+                _G.CloseBankFrame()
+            end
         else
             local SV = _G.FugaziBAGSDB
             if not (SV and SV.gphPoint and SV.gphPoint.point) then

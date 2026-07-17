@@ -889,12 +889,12 @@ function A.GPHQualBtn_OnEnter(self)
             GameTooltip:AddLine("Alt+LMB: Protect Rarity", 1, 1, 1)
         end
 
-        -- Check context for Mail/Bank
-        local atBank = A.Bank and A.Bank:IsShown()
+        -- Check context for Mail/Bank/GuildBank
+        local atBank = (A.Bank and A.Bank:IsShown()) or (_G.GuildBankFrame and _G.GuildBankFrame:IsShown())
         local atMail = _G.MailFrame and _G.MailFrame:IsShown()
         
         if atBank or atMail then
-            local location = atBank and "Bank" or "Mailbox"
+            local location = (atBank and (_G.GuildBankFrame and _G.GuildBankFrame:IsShown() and "Guild/Realm Bank" or "Bank")) or "Mailbox"
             GameTooltip:AddLine("Shift+RMB: Move rarity to " .. location, 0.6, 1, 0.6)
         end
 
@@ -1242,6 +1242,7 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
     if not div then
         div = CreateFrame("Button", nil, content)
         div:EnableMouse(true)
+        div:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         
         local tex = div:CreateTexture(nil, "ARTWORK")
         tex:SetTexture(0.4, 0.35, 0.2, 0.7)
@@ -1269,7 +1270,19 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
         div.label:ClearAllPoints()
         div.label:SetPoint("LEFT", toggle, "RIGHT", 2, 0)
         
-        div:SetScript("OnClick", function(self)
+        div:SetScript("OnClick", function(self, button)
+            local shift = IsShiftKeyDown and IsShiftKeyDown()
+            if shift and button == "RightButton" then
+                local bf = A.Bank
+                local gbf = _G.GuildBankFrame
+                local mf = _G.MailFrame
+                if (bf and bf:IsShown()) or (gbf and gbf:IsShown()) or (mf and mf:IsShown()) then
+                    local mode = (gbf and gbf:IsShown()) and "bags_to_guildbank" or ((bf and bf:IsShown()) and "bags_to_bank" or "bags_to_mail")
+                    A.RarityMoveJob = { mode = mode, category = self.categoryName }
+                    if A.RarityMoveWorker then A.RarityMoveWorker._t = 0; A.RarityMoveWorker:Show() end
+                    return
+                end
+            end
             if clickHandler then clickHandler(self) end
         end)
         
@@ -1277,6 +1290,12 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
             if A.PlayHoverSound then A.PlayHoverSound() end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Click to collapse/expand")
+            local atBank = (A.Bank and A.Bank:IsShown()) or (_G.GuildBankFrame and _G.GuildBankFrame:IsShown())
+            local atMail = _G.MailFrame and _G.MailFrame:IsShown()
+            if atBank or atMail then
+                local loc = (atBank and (_G.GuildBankFrame and _G.GuildBankFrame:IsShown() and "Guild/Realm Bank" or "Bank")) or "Mailbox"
+                GameTooltip:AddLine("Shift+RMB: Move category to " .. loc, 0.6, 1, 0.6)
+            end
             GameTooltip:Show()
             if self.categoryName == "DELETE" then
                 if self.label then self.label:SetAlpha(0.7) end

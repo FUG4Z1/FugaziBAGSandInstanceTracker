@@ -139,24 +139,23 @@ gphVendorWorker:Hide()
 local function BuildGphVendorQueue()
     wipe(gphVendorQueue)
     gphVendorQueueIndex = 1
-    for bag = 0, 4 do
-        local slots = GetContainerNumSlots and GetContainerNumSlots(bag) or 0
-        for slot = 1, slots do
-            local itemID = GetContainerItemID and GetContainerItemID(bag, slot)
-            if itemID then
-                local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-                local _, _, quality
-                if link then _, _, quality = A.GetCachedItemInfo(link) end
-                if quality == nil then _, _, quality = A.GetCachedItemInfo(itemID) end
-                if not A.IsItemProtectedAPI(itemID, quality) then
-                    local texture, itemCount, locked = GetContainerItemInfo(bag, slot)
-                    if itemCount and itemCount > 0 and not locked then
-                        local sellPrice = select(11, A.GetCachedItemInfo(link or itemID))
-                        local maxQualityAllowed = (A.GetPerChar and A.GetPerChar("gphAutosellEverything", false) == true) and 3 or 0
-                        if sellPrice and sellPrice > 0 and quality <= maxQualityAllowed then
-                            gphVendorQueue[#gphVendorQueue + 1] = { type = "sell", bag = bag, slot = slot, itemID = itemID }
-                        end
-                    end
+    local items = A.GetCachedBagItems and A.GetCachedBagItems()
+    if not items then return end
+    
+    local maxQualityAllowed = (A.GetPerChar and A.GetPerChar("gphAutosellEverything", false) == true) and 3 or 0
+    
+    for i = 1, #items do
+        local entry = items[i]
+        if entry.sellPrice > 0 and entry.quality <= maxQualityAllowed then
+            if not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(entry.itemId, entry.quality)) then
+                local texture, itemCount, locked = GetContainerItemInfo(entry.bag, entry.slot)
+                if itemCount and itemCount > 0 and not locked then
+                    gphVendorQueue[#gphVendorQueue + 1] = {
+                        type = "sell",
+                        bag = entry.bag,
+                        slot = entry.slot,
+                        itemID = entry.itemId
+                    }
                 end
             end
         end
@@ -165,6 +164,7 @@ end
 
 local function FinishGphVendorRun()
     gphVendorRunning = false
+    A.isAutoSelling = nil
     local wasOverride = gphVendorSessionOverride
     gphVendorSessionOverride = false
     gphVendorWorker:Hide()
@@ -172,6 +172,7 @@ local function FinishGphVendorRun()
     if not wasOverride and wantGreedy then
         QueueGphSummonGreedy()
     end
+    if _G.RefreshGPHUI then _G.RefreshGPHUI() end
 end
 
 gphVendorWorker:SetScript("OnUpdate", function(self, elapsed)
@@ -181,6 +182,7 @@ gphVendorWorker:SetScript("OnUpdate", function(self, elapsed)
     self._t = 0
     if not MerchantFrame or not MerchantFrame:IsShown() then
         gphVendorRunning = false
+        A.isAutoSelling = nil
         self:Hide()
         return
     end
@@ -233,9 +235,11 @@ local function StartGphVendorRun()
     gphVendorSessionOverride = shift
     if gphVendorSessionOverride then return end
     gphVendorRunning = true
+    A.isAutoSelling = true
     BuildGphVendorQueue()
     if #gphVendorQueue == 0 then
         gphVendorRunning = false
+        A.isAutoSelling = nil
         local wantGreedy = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphSummonGreedy ~= false
         if UnitExists("target") and UnitName("target") == GOBLIN_MERCHANT_NAME and MerchantFrame and MerchantFrame:IsShown() and wantGreedy then
             QueueGphSummonGreedy()
@@ -328,11 +332,7 @@ function A.OnMerchantShow()
     end)
     local gphFrame = A.Inventory
     if gphFrame and gphFrame.UpdateGphSummonBtn then gphFrame.UpdateGphSummonBtn() end
-    
-    if RefreshGPHUI then
-        local d = CreateFrame("Frame")
-        d:SetScript("OnUpdate", function(self) self:SetScript("OnUpdate", nil); RefreshGPHUI() end)
-    end
+
 end
 
 function A.OnMerchantClosed()

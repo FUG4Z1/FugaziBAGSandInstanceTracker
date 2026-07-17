@@ -228,7 +228,8 @@ function A.StealthHideElvUIBank()
                             local atVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
                             local atMailbox = _G.MailFrame and _G.MailFrame:IsShown()
                             local atAH = _G.AuctionFrame and _G.AuctionFrame:IsShown()
-                            if not (atVendor or atMailbox or atAH) then
+                            local atBank = (A.Bank and A.Bank:IsShown()) or (_G.BankFrame and _G.BankFrame:IsShown())
+                            if not (atVendor or atMailbox or atAH or atBank) then
                                 local gf = A.Inventory
                                 local container = gf and gf.gphInventoryContainer
                                 if container then

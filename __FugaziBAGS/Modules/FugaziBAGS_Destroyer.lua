@@ -360,11 +360,47 @@ local function GPHIsDestroyable(bag, slot, link)
 end
 A.GPHIsDestroyable = GPHIsDestroyable
 
+local cachedBagItems = nil
 local cachedList = nil
 local cacheDirty = true
 
 function A.DirtyDestroyableCache()
     cacheDirty = true
+    cachedBagItems = nil
+end
+
+function A.GetCachedBagItems()
+    if cacheDirty or not cachedBagItems then
+        cachedBagItems = {}
+        for bag = 0, 4 do
+            local numSlots = GetContainerNumSlots and GetContainerNumSlots(bag)
+            if numSlots then
+                for slot = 1, numSlots do
+                    local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+                    if link then
+                        local itemId = tonumber(link:match("item:(%d+)"))
+                        if itemId then
+                            local name, _, quality, iLevel, reqLevel, _, _, _, _, _, sellPrice = A.GetCachedItemInfo(link)
+                            quality = quality or 0
+                            sellPrice = sellPrice or 0
+                            table.insert(cachedBagItems, {
+                                bag = bag,
+                                slot = slot,
+                                link = link,
+                                itemId = itemId,
+                                quality = quality,
+                                sellPrice = sellPrice,
+                                iLevel = iLevel or 0,
+                                reqLevel = reqLevel or 0,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+        cacheDirty = false
+    end
+    return cachedBagItems
 end
 
 --- First destroyable item in bags (for continuous delete; optional prospect priority).
@@ -372,34 +408,27 @@ local function GetFirstDestroyableInBags(preferProspect)
     local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
     local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
     
-    if cacheDirty or not cachedList then
+    if not cachedList then
         cachedList = {}
-        for bag = 0, 4 do
-            local numSlots = GetContainerNumSlots and GetContainerNumSlots(bag)
-            if numSlots then
-                for slot = 1, numSlots do
-                    local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-                    if link then
-                        local spell = GPHIsDestroyable(bag, slot, link)
-                        if spell then
-                            local itemId = tonumber(link:match("item:(%d+)"))
-                            local name, _, quality, iLevel, reqLevel = A.GetCachedItemInfo(link)
-                            quality = quality or 0
-                            if itemId and A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, quality) then
-                            else
-                                table.insert(cachedList, {
-                                    bag = bag,
-                                    slot = slot,
-                                    spell = spell,
-                                    isDE = spell:find("Disenchant", 1, true),
-                                    quality = quality,
-                                    reqLevel = reqLevel or 0,
-                                    iLevel = iLevel or 0,
-                                    link = link,
-                                    itemId = itemId,
-                                })
-                            end
-                        end
+        local items = A.GetCachedBagItems()
+        for i = 1, #items do
+            local e = items[i]
+            local texture, _, locked = GetContainerItemInfo(e.bag, e.slot)
+            if texture and not locked then
+                local spell = GPHIsDestroyable(e.bag, e.slot, e.link)
+                if spell then
+                    if not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(e.itemId, e.quality)) then
+                        table.insert(cachedList, {
+                            bag = e.bag,
+                            slot = e.slot,
+                            spell = spell,
+                            isDE = spell:find("Disenchant", 1, true),
+                            quality = e.quality,
+                            reqLevel = e.reqLevel,
+                            iLevel = e.iLevel,
+                            link = e.link,
+                            itemId = e.itemId,
+                        })
                     end
                 end
             end
@@ -411,20 +440,32 @@ local function GetFirstDestroyableInBags(preferProspect)
             local ai, bi = a.iLevel or 0, b.iLevel or 0
             return ai < bi
         end)
-        
-        cacheDirty = false
     end
     
     if #cachedList == 0 then return nil end
     
-    local active = A.activeDisenchantSlot
+    local now = GetTime()
+    local lockedSlots = A.lockedDisenchantSlots
+    if not lockedSlots then
+        lockedSlots = {}
+        A.lockedDisenchantSlots = lockedSlots
+    end
+    for key, lockTime in pairs(lockedSlots) do
+        if (now - lockTime) > 4.5 then
+            lockedSlots[key] = nil
+        end
+    end
     
     local function pick(deFirst)
         for i = 1, #cachedList do
             local e = cachedList[i]
-            if not (active and active.bag == e.bag and active.slot == e.slot) then
-                if deFirst and e.isDE then return e.bag, e.slot, e.spell, e.link end
-                if not deFirst and not e.isDE then return e.bag, e.slot, e.spell, e.link end
+            local key = e.bag .. "_" .. e.slot
+            if not lockedSlots[key] then
+                local texture, _, locked = GetContainerItemInfo(e.bag, e.slot)
+                if texture and not locked then
+                    if deFirst and e.isDE then return e.bag, e.slot, e.spell, e.link end
+                    if not deFirst and not e.isDE then return e.bag, e.slot, e.spell, e.link end
+                end
             end
         end
         return nil
@@ -445,8 +486,12 @@ local function GetFirstDestroyableInBags(preferProspect)
     
     for i = 1, #cachedList do
         local e = cachedList[i]
-        if not (active and active.bag == e.bag and active.slot == e.slot) then
-            return e.bag, e.slot, e.spell, e.link
+        local key = e.bag .. "_" .. e.slot
+        if not lockedSlots[key] then
+            local texture, _, locked = GetContainerItemInfo(e.bag, e.slot)
+            if texture and not locked then
+                return e.bag, e.slot, e.spell, e.link
+            end
         end
     end
     

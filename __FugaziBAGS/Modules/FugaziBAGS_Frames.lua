@@ -527,12 +527,19 @@ function A.CreateGPHFrame()
             self:SetAttribute("macrotext1", "")
             return
         end
+        
         local now = GetTime()
-        if now - lastClickTime < 0.25 then
+        if now - lastClickTime < 0.5 then
             self:SetAttribute("macrotext1", "")
             return
         end
         lastClickTime = now
+
+        -- If the spell targeting cursor is stuck, reset the slot locks
+        if SpellIsTargeting and SpellIsTargeting() then
+            if A.lockedDisenchantSlots then wipe(A.lockedDisenchantSlots) end
+            A.activeDisenchantSlot = nil
+        end
         
         -- Prevent disenchanting if moving or mounted (failsafe against accidental equips)
         if (GetUnitSpeed and GetUnitSpeed("player") or 0) > 0 or (IsMounted and IsMounted()) then
@@ -547,14 +554,22 @@ function A.CreateGPHFrame()
             self:SetAttribute("macrotext1", "")
             return
         end
+        
         local preferProspect = DB.gphDestroyPreferProspect
-        local bag, slot, spellName = A.GetFirstDestroyableInBags(preferProspect)
+        local bag, slot, spellName, itemLink = A.GetFirstDestroyableInBags(preferProspect)
+        
         if not spellName or not bag or not slot then
             self:SetAttribute("macrotext1", "")
             return
         end
+        
+        local link = GetContainerItemLink(bag, slot)
+        local itemId = link and tonumber(link:match("item:(%d+)"))
+        
         A.isDisenchanting = true
-        A.activeDisenchantSlot = { bag = bag, slot = slot }
+        A.lockedDisenchantSlots = A.lockedDisenchantSlots or {}
+        A.lockedDisenchantSlots[bag .. "_" .. slot] = now
+        A.activeDisenchantSlot = { bag = bag, slot = slot, itemId = itemId, time = now }
         self:SetAttribute("macrotext1", ("/cast %s;\n/use %d %d"):format(spellName, bag, slot))
         
         -- Show blocker overlay to absorb all subsequent clicks for 0.5 seconds
