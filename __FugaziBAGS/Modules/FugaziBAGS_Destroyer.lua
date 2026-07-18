@@ -367,6 +367,7 @@ local cacheDirty = true
 function A.DirtyDestroyableCache()
     cacheDirty = true
     cachedBagItems = nil
+    cachedList = nil
 end
 
 function A.GetCachedBagItems()
@@ -408,7 +409,7 @@ local function GetFirstDestroyableInBags(preferProspect)
     local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
     local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
     
-    if not cachedList then
+    if cacheDirty or not cachedList then
         cachedList = {}
         local items = A.GetCachedBagItems()
         for i = 1, #items do
@@ -621,10 +622,10 @@ function A.ScanBagsForDestruction()
     end
     
     if #A.destroyQueue > 0 then
-        -- A.AddonPrint("ScanBagsForDestruction: Queued " .. #A.destroyQueue .. " items.")
         A.EnsureGPHDestroyerFrame()
         if A.destroyerFrame then A.destroyerFrame:Show() end
     end
+    A._gphIsScanningBagsForDestruction = nil
 end
 
 local lootHandler = CreateFrame("Frame")
@@ -643,6 +644,8 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "LOOT_CLOSED" then
         A.isDisenchanting = nil
+        A.activeDisenchantSlot = nil
+        if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
         if A.RefreshGPHUI then A.RefreshGPHUI() end
     elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
         local unit, spellName = ...
@@ -652,6 +655,7 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
             if spellName == de or spellName == pr then
                 A.isDisenchanting = nil
                 A.activeDisenchantSlot = nil
+                if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
                 if A.RefreshGPHUI then A.RefreshGPHUI() end
             end
         end

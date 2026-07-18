@@ -33,6 +33,37 @@ local function CreateGPHFrame(...) return A.CreateGPHFrame(...) end
 local function RefreshGPHUI() if _G.RefreshGPHUI then _G.RefreshGPHUI() end end
 local function RefreshBankUI() if _G.RefreshBankUI then _G.RefreshBankUI() end end
 
+function A.NotepadDebug(msg)
+    local SV = _G.FugaziBAGSDB
+    if not SV then return end
+    if not SV.notepadTabs then
+        SV.notepadTabs = { {name = "Main", content = SV.notepadText or ""} }
+        SV.activeNotepadTab = 1
+    end
+    
+    local debugTabIndex = nil
+    for i, tab in ipairs(SV.notepadTabs) do
+        if tab.name == "Debug" then
+            debugTabIndex = i
+            break
+        end
+    end
+    
+    if not debugTabIndex then
+        table.insert(SV.notepadTabs, { name = "Debug", content = "" })
+        debugTabIndex = #SV.notepadTabs
+    end
+    
+    local timeStr = date("%H:%M:%S") .. "." .. string.format("%03d", (GetTime() % 1) * 1000)
+    local currentText = SV.notepadTabs[debugTabIndex].content or ""
+    SV.notepadTabs[debugTabIndex].content = currentText .. "[" .. timeStr .. "] " .. tostring(msg) .. "\n"
+    
+    if _G.FugaziBAGSNotepad and _G.FugaziBAGSNotepad:IsShown() and SV.activeNotepadTab == debugTabIndex then
+        _G.FugaziBAGSNotepad.editBox:SetText(SV.notepadTabs[debugTabIndex].content)
+        _G.FugaziBAGSNotepad:RefreshTabs()
+    end
+end
+
 --------------------------------------------------------------------------------
 -- 4. MASTER EVENT ROUTER
 --------------------------------------------------------------------------------

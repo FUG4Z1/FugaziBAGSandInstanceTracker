@@ -53,8 +53,8 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
 
     -- 1. If we already have the frames, just update them and RETURN
     if par and btn then
-        par:SetID(bag)
-        btn:SetID(slot)
+        if par:GetID() ~= bag then par:SetID(bag) end
+        if btn:GetID() ~= slot then btn:SetID(slot) end
         
         -- Identity mirroring (for tooltips/hovers)
         par.bag = bag; par.slot = slot
@@ -62,29 +62,9 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
         if modOverlay then modOverlay.bag = bag; modOverlay.slot = slot end
         
         -- Update visibility/state if needed
-        par:Show()
-        btn:Show()
+        if not par:IsShown() then par:Show() end
+        if not btn:IsShown() then btn:Show() end
         
-        -- Ensure children are synced if they exist
-        if modOverlay then modOverlay:SetParent(par); modOverlay:SetAllPoints(par) end
-        
-        local isAtVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
-        local isProt = false
-        if isAtVendor and A.IsItemProtectedAPI then
-            local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-            local itemId = link and tonumber(link:match("item:(%d+)"))
-            if itemId and A.IsItemProtectedAPI(itemId) then
-                isProt = true
-            end
-        end
-        if not InCombatLockdown() then
-            if isAtVendor and isProt then
-                btn:RegisterForClicks("LeftButtonUp")
-            else
-                btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-            end
-        end
-
         return
     end
 
@@ -196,22 +176,11 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
     clickArea._fugaziSecPar = par
     clickArea._fugaziModifierOverlay = modOverlay
     
-    local isAtVendor = _G.MerchantFrame and _G.MerchantFrame:IsShown()
-    local isProt = false
-    if isAtVendor and A.IsItemProtectedAPI then
-        local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-        local itemId = link and tonumber(link:match("item:(%d+)"))
-        if itemId and A.IsItemProtectedAPI(itemId) then
-            isProt = true
+    btn:SetScript("OnClick", function(self, button, down)
+        if A.HandleBagSlotClick then
+            A.HandleBagSlotClick(clickArea, button, down)
         end
-    end
-    if not InCombatLockdown() then
-        if isAtVendor and isProt then
-            btn:RegisterForClicks("LeftButtonUp")
-        else
-            btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        end
-    end
+    end)
 
     par:Show()
     btn:Show()

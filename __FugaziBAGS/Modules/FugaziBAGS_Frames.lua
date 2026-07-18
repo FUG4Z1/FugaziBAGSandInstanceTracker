@@ -286,6 +286,7 @@ function A.CreateGPHFrame()
     f:SetScript("OnDragStart", function(self) A.GPHOnDragStart(self) end)
     f:SetScript("OnDragStop", function(self) A.GPHOnDragStop(self) end)
     f:SetScript("OnHide", function()
+        if f.gphDestroyBtn then f.gphDestroyBtn:Hide() end
         if f.gphProxyFrame then f.gphProxyFrame:Hide() end
         A.SaveFrameLayout(f, "gphShown", "gphPoint")
         if not f.gphGridMode and f.gphScrollBar then
@@ -296,6 +297,7 @@ function A.CreateGPHFrame()
     end)
     f._gphSkinAppliedOnFirstShow = nil  
     f:SetScript("OnShow", function()
+        if f.gphDestroyBtn then f.gphDestroyBtn:SetScale(f:GetScale()) end
         if not InCombatLockdown() and f.gphProxyFrame then f.gphProxyFrame:Show() end
         if not f._gphSkinAppliedOnFirstShow and f.ApplySkin then
             f._gphSkinAppliedOnFirstShow = true
@@ -489,7 +491,7 @@ function A.CreateGPHFrame()
     f.UpdateGPHButtonVisibility = function(self) A.UpdateGPHButtonVisibility(self) end
     if DB.gphDestroyPreferProspect == nil then DB.gphDestroyPreferProspect = false end
 
-    local destroyBtn = CreateFrame("Button", nil, titleBar, "SecureActionButtonTemplate")
+    local destroyBtn = CreateFrame("Button", "FugaziBAGS_DestroyBtn", UIParent, "SecureActionButtonTemplate")
     destroyBtn:SetSize(22, 22) 
     destroyBtn:SetPoint("LEFT", titleBar, "LEFT", 0, 0)
     destroyBtn:SetFrameStrata("DIALOG")
@@ -507,16 +509,6 @@ function A.CreateGPHFrame()
     destroyIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) 
     destroyIcon:SetAlpha(1.0)
     destroyBtn.icon = destroyIcon
-
-    -- Click blocker overlay to swallow spam clicks
-    local destroyBlocker = CreateFrame("Button", nil, destroyBtn)
-    destroyBlocker:SetAllPoints(destroyBtn)
-    destroyBlocker:SetFrameLevel(destroyBtn:GetFrameLevel() + 5)
-    destroyBlocker:EnableMouse(true)
-    destroyBlocker:RegisterForClicks("AnyUp", "AnyDown")
-    destroyBlocker:SetScript("OnClick", function() end) -- Consume the clicks
-    destroyBlocker:Hide()
-    destroyBtn.blocker = destroyBlocker
 
     local lastClickTime = 0
     destroyBtn:SetScript("PreClick", function(self, button, down)
@@ -571,19 +563,6 @@ function A.CreateGPHFrame()
         A.lockedDisenchantSlots[bag .. "_" .. slot] = now
         A.activeDisenchantSlot = { bag = bag, slot = slot, itemId = itemId, time = now }
         self:SetAttribute("macrotext1", ("/cast %s;\n/use %d %d"):format(spellName, bag, slot))
-        
-        -- Show blocker overlay to absorb all subsequent clicks for 0.5 seconds
-        if self.blocker then
-            self.blocker:Show()
-            self.blocker.elapsed = 0
-            self.blocker:SetScript("OnUpdate", function(self2, elapsed)
-                self2.elapsed = (self2.elapsed or 0) + elapsed
-                if self2.elapsed >= 0.5 then
-                    self2:SetScript("OnUpdate", nil)
-                    self2:Hide()
-                end
-            end)
-        end
     end)
     destroyBtn:SetScript("OnEnter", function()
         if f.gphBtnHover then

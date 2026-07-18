@@ -122,7 +122,6 @@ function A.RefreshGPHUI()
         return
     end
     
-    if A.RefreshGPHBagRow then A.RefreshGPHBagRow(gphFrame) end
     local DB = _G.FugaziBAGSDB or {}
     local gphSession = _G.gphSession
     
@@ -148,8 +147,10 @@ function A.RefreshGPHUI()
         gphFrame._refreshGPHScheduler:Show() -- Start/Reset trailing edge timer
         return
     end
-    gphFrame._lastRefreshGPHUI = now
+    -- We update the last refresh timer at the end of execution to prevent sync delays from bypassing the throttle
     if gphFrame._refreshGPHScheduler then gphFrame._refreshGPHScheduler:Hide() end
+    
+    if A.RefreshGPHBagRow then A.RefreshGPHBagRow(gphFrame) end
     
     if A.DiffBagsGPH then
         A.DiffBagsGPH()
@@ -855,6 +856,9 @@ function A.RefreshGPHUI()
             if onEnter then pcall(onEnter, focus) end
         end
     end
+    
+    gphFrame._lastRefreshGPHUI = (GetTime and GetTime()) or time()
+    
     A._gphIsCleaningBuffer = GetTime()
 end
 
@@ -873,19 +877,20 @@ _gphEventFrame:RegisterEvent("PLAYER_MONEY")
 _gphEventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 _gphEventFrame:RegisterEvent("BAG_CLOSED")
 
+local _gphEventDeferFrame = CreateFrame("Frame")
+_gphEventDeferFrame:Hide()
+_gphEventDeferFrame:SetScript("OnUpdate", function(self)
+    self:Hide()
+    if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+end)
+
 _gphEventFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "PLAYER_MONEY" then
-        if _G.RefreshGPHUI then _G.RefreshGPHUI() end
-        return
-    end
-    
     if event == "BAG_UPDATE" then
         if A.WipeBagLinkCache then A.WipeBagLinkCache(arg1) end
     end
     
-    -- Throttled Refresh
     A._gphBagSpaceDirty = true
-    if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+    _gphEventDeferFrame:Show()
 end)
 
 -- Global Export

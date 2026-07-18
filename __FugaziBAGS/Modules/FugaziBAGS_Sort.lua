@@ -376,6 +376,16 @@ do
 		if timerFrame._t < WAIT_TIME then return end
 		timerFrame._t = 0
 
+		if timerFrame._startTime and (GetTime() - timerFrame._startTime > 12) then
+			timerFrame:Hide()
+			table.wipe(moves)
+			table.wipe(moveTracker)
+			lastItemID, lockStop, lastDestination, lastMove = nil, nil, nil, nil
+			moveRetries = 0
+			if onDoneCallback then onDoneCallback() end
+			return
+		end
+
 		if InCombatLockdown and InCombatLockdown() then
 			timerFrame:Hide()
 			table.wipe(moves)
@@ -445,9 +455,20 @@ do
 			local i = #moves
 			success, moveID, moveSource, targetID, moveTarget = DoMove(moves[i])
 			if not success then
-				lockStop = GetTime()
+				lockStop = lockStop or GetTime()
+				moveRetries = moveRetries + 1
+				if (GetTime() - lockStop) > 3.0 or moveRetries > 50 then
+					timerFrame:Hide()
+					table.wipe(moves)
+					table.wipe(moveTracker)
+					lastItemID, lockStop, lastDestination, lastMove = nil, nil, nil, nil
+					moveRetries = 0
+					if onDoneCallback then onDoneCallback() end
+				end
 				return
 			end
+			lockStop = nil
+			moveRetries = 0
 			lastMove = moves[i]
 			table.remove(moves, i)
 			moveTracker[moveSource] = targetID
@@ -463,7 +484,17 @@ do
 	end)
 
 	A.GPH_BagSort_Run = function(callback, bagGroup, optionalBagList)
-		if timerFrame:IsShown() then return end
+		if timerFrame:IsShown() then
+			if timerFrame._startTime and (GetTime() - timerFrame._startTime < 2.5) then
+				return
+			end
+			timerFrame:Hide()
+			table.wipe(moves)
+			table.wipe(moveTracker)
+			lastItemID, lockStop, lastDestination, lastMove = nil, nil, nil, nil
+			moveRetries = 0
+		end
+		timerFrame._startTime = GetTime()
 		if bagGroup == "bank" and optionalBagList and #optionalBagList > 0 then
 			currentBagList = optionalBagList
 		elseif bagGroup == "bank" and #bankBags > 0 then
