@@ -176,7 +176,7 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
     clickArea._fugaziSecPar = par
     clickArea._fugaziModifierOverlay = modOverlay
     
-    btn:SetScript("OnClick", function(self, button, down)
+    btn:HookScript("OnClick", function(self, button, down)
         if A.HandleBagSlotClick then
             A.HandleBagSlotClick(clickArea, button, down)
         end

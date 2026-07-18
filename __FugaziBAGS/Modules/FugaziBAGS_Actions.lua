@@ -7,6 +7,11 @@ A.gphTooltipDebug = true -- Global Debug: Always on for session tracking
   Centralizes item protection, destruction (Modifier+Click), and bag events.
 ]]
 
+-- FugaziBAGS Actions module
+local addonName, Addon = ...
+local A = _G.FugaziBAGS or Addon or {}
+
+
 StaticPopupDialogs["GPH_DELETE_QUALITY"] = {
     text = "Delete all %d %s",
     button1 = "|cffff0000DELETE ALL|r",
@@ -131,6 +136,18 @@ function A.HandleBagSlotEnter(frame, silent, hostWindow)
         local prot = A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, q)
         local isPrev = A.IsItemWorn and A.IsItemWorn(itemId) or false
 
+        -- DYNAMIC SECURE VENDOR PROTECTION:
+        -- Update the secure button's click bindings on the fly when we hover.
+        -- If we are at a vendor and the item is protected, we securely disable RightButtonUp!
+        local btn = canonical._fugaziSecBtn
+        if btn and not InCombatLockdown() then
+            if prot and _G.MerchantFrame and _G.MerchantFrame:IsShown() then
+                btn:RegisterForClicks("LeftButtonUp")
+            else
+                btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            end
+        end
+
         if isPrev then
             GameTooltip:AddLine("Previously worn gear", 0.40, 0.80, 0.40)
             GameTooltip:AddLine("Alt+LMB: Unprotect", 0.80, 0.80, 0.80)
@@ -206,59 +223,8 @@ end)
 --- Unified OnClick handler for bag slots.
 function A.HandleBagSlotClick(frame, button, down)
     -- TRIGGER CLICK SHIELD: Freeze tooltip anchoring/moving for 150ms to survive the BAG_UPDATE flurry.
+    -- (The actual item click, pickup, and modifiers are securely handled by ContainerFrameItemButtonTemplate and modOverlay)
     A.gphTooltipShield = GetTime() + 0.15
-
-    local bag, slot = A.GetBagSlotFromFrame(frame)
-    if not bag or not slot then return end
-
-    local shift = IsShiftKeyDown()
-    local alt = IsAltKeyDown()
-    local ctrl = IsControlKeyDown()
-
-    -- 1. Handle Modifier Actions (Protection, Destruction)
-    if (alt and button == "LeftButton") or (ctrl and button == "RightButton") then
-        A.HandleModifierAction(frame, button, bag, slot, alt, ctrl, shift)
-        return
-    end
-
-    -- 1.1 Handle Ctrl-Click (Inspect/DressUp)
-    if ctrl and button == "LeftButton" then
-        local link = GetContainerItemLink(bag, slot)
-        if link then
-            if IsModifiedClick("DRESSUP") then
-                HandleModifiedItemClick(link)
-            end
-        end
-        return
-    end
-
-    -- 2. Handle Shift-Click (Stack Splitting or Chat Link)
-    if shift then
-        local link = GetContainerItemLink(bag, slot)
-        if link and ChatEdit_GetActiveWindow() then
-            ChatEdit_InsertLink(link)
-        elseif button == "LeftButton" then
-            local _, count = GetContainerItemInfo(bag, slot)
-            if count and count > 1 then
-                OpenStackSplitFrame(count, frame, "BOTTOMLEFT", "TOPLEFT")
-            end
-        end
-        return
-    end
-
-    -- 3. Handle Standard Actions (Pickup, Use)
-    if button == "LeftButton" then
-        PickupContainerItem(bag, slot)
-    elseif button == "RightButton" then
-        if _G.MerchantFrame and _G.MerchantFrame:IsShown() then
-            local link = GetContainerItemLink(bag, slot)
-            local itemId = link and tonumber(link:match("item:(%d+)"))
-            if itemId and A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId) then
-                return
-            end
-        end
-        UseContainerItem(bag, slot)
-    end
 end
 
 --- Handle specialized modifier actions (Alt+LMB for Protection, Ctrl+RMB for Autodelete).
