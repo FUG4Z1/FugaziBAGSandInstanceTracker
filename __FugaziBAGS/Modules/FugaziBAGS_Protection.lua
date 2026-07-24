@@ -80,7 +80,7 @@ function A.GetGphProtectedRarityFlags()
 end
 
 --- Soulbound-to-vendor check: item or quality protected?
-function A.IsItemProtectedAPI(itemId, qualityArg)
+function A.IsItemProtectedAPI(itemId, qualityArg, ignoreRarity)
     if not itemId then return false end
     itemId = tonumber(itemId)
     if itemId == A.HEARTHSTONE_ID then return true end
@@ -106,6 +106,8 @@ function A.IsItemProtectedAPI(itemId, qualityArg)
         local ledger = A.GetGphWornLedger()
         if ledger and ledger[itemId] then return true end
     end
+
+    if ignoreRarity then return false end
 
     local flags = A.GetGphProtectedRarityFlags and A.GetGphProtectedRarityFlags()
     if not flags then return false end

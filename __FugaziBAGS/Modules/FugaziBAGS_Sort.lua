@@ -36,7 +36,7 @@ do
 		for i = (NUM_BAG_SLOTS or 4) + 1, (NUM_BAG_SLOTS or 4) + (NUM_BANKBAGSLOTS or 6) do bankBags[#bankBags + 1] = i end
 	end
 
-	local bagIDs, bagStacks, bagMaxStacks, bagQualities = {}, {}, {}, {}
+	local bagIDs, bagLinks, bagStacks, bagMaxStacks, bagQualities = {}, {}, {}, {}, {}
 	local moves, moveTracker = {}, {}
 	local bagSorted, initialOrder, bagLocked = {}, {}, {}
 	local lastItemID, lockStop, lastDestination, lastMove
@@ -72,11 +72,13 @@ do
 				bagStacks[to] = (bagStacks[to] or 0) + (bagStacks[from] or 0)
 				bagStacks[from] = nil
 				bagIDs[from] = nil
+				bagLinks[from] = nil
 				bagQualities[from] = nil
 				bagMaxStacks[from] = nil
 			end
 		else
 			bagIDs[from], bagIDs[to] = bagIDs[to], bagIDs[from]
+			bagLinks[from], bagLinks[to] = bagLinks[to], bagLinks[from]
 			bagQualities[from], bagQualities[to] = bagQualities[to], bagQualities[from]
 			bagStacks[from], bagStacks[to] = bagStacks[to], bagStacks[from]
 			bagMaxStacks[from], bagMaxStacks[to] = bagMaxStacks[to], bagMaxStacks[from]
@@ -126,23 +128,26 @@ do
 	local currentBagList = playerBags
 	local function GPH_BagSort_ScanBags()
 		table.wipe(bagIDs)
+		table.wipe(bagLinks)
 		table.wipe(bagStacks)
 		table.wipe(bagMaxStacks)
 		table.wipe(bagQualities)
 		for _, bag, slot in IterateBags(currentBagList, false) do
 			local bagSlot = Encode(bag, slot)
 			local itemID = GetContainerItemID and GetContainerItemID(bag, slot)
+			local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
 			if not itemID then
-				local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
 				if link then itemID = tonumber((link):match("item:(%d+)")) end
 			end
 			if itemID then
-				local _, _, _, _, _, _, _, maxStack = A.GetCachedItemInfo(itemID)
+				bagLinks[bagSlot] = link
+				local _, _, _, _, _, _, _, maxStack = A.GetCachedItemInfo(link or itemID)
 				bagMaxStacks[bagSlot] = (maxStack and maxStack > 0) and maxStack or 1
 				bagIDs[bagSlot] = itemID
 				local _, count = GetContainerItemInfo(bag, slot)
 				bagStacks[bagSlot] = count or 1
-				local _, _, quality = A.GetCachedItemInfo(itemID)
+				local _, _, quality = A.GetCachedItemInfo(link or itemID)
+				bagQualities[bagSlot] = quality
 			end
 		end
 	end
@@ -200,8 +205,8 @@ do
 	end
 
 	local function NameTiebreak(a, b)
-		local aName = A.GetCachedItemInfo(bagIDs[a])
-    local bName = A.GetCachedItemInfo(bagIDs[b])
+		local aName = A.GetCachedItemInfo(bagLinks[a] or bagIDs[a])
+        local bName = A.GetCachedItemInfo(bagLinks[b] or bagIDs[b])
 		if aName and bName and aName ~= bName then return aName < bName end
 		return (initialOrder[a] or 0) < (initialOrder[b] or 0)
 	end
@@ -218,8 +223,9 @@ do
 
 	local function DefaultSort(a, b)
 		local aID, bID = bagIDs[a], bagIDs[b]
+        local aLink, bLink = bagLinks[a] or aID, bagLinks[b] or bID
 		if (not aID) or (not bID) then return aID ~= nil end
-		if aID == bID then
+		if aID == bID and aLink == bLink then
 			local ac, bc = bagStacks[a] or 0, bagStacks[b] or 0
 			if ac == bc then return (initialOrder[a] or 0) < (initialOrder[b] or 0) end
 			return ac > bc
@@ -238,19 +244,15 @@ do
 		local bProt = IsProtectedForSort(bID, bRarity)
 		if aProt ~= bProt then return aProt end
 
-		local aName, _, _, aLvl, _, aType, aSubType, _, _, _, aPrice = A.GetCachedItemInfo(aID)
-		local bName, _, _, bLvl, _, bType, bSubType, _, _, _, bPrice = A.GetCachedItemInfo(bID)
-		-- ASCENSION NOTE: Standard GetItemInfo API is inaccurate for Prices and iLvls
-		-- on Ascension due to server-side scaling. Sorting by these values 
-		-- results in "random" looking bag orders. Disabled on Ascension.
-		local isAsc = A.IsAscension and A.IsAscension()
+		local aName, _, _, aLvl, _, aType, aSubType, _, _, _, aPrice = A.GetCachedItemInfo(aLink)
+		local bName, _, _, bLvl, _, bType, bSubType, _, _, _, bPrice = A.GetCachedItemInfo(bLink)
 		
-		if mode == "vendor" and not isAsc then
+		if mode == "vendor" then
 			aPrice = aPrice or 0; bPrice = bPrice or 0
 			if aPrice ~= bPrice then return aPrice > bPrice end
 			if aRarity ~= bRarity then return aRarity > bRarity end
 			return NameTiebreak(a, b)
-		elseif mode == "itemlevel" and not isAsc then
+		elseif mode == "itemlevel" then
 			aLvl = aLvl or 0; bLvl = bLvl or 0
 			if aLvl ~= bLvl then return aLvl > bLvl end
 			if aRarity ~= bRarity then return aRarity > bRarity end
@@ -259,10 +261,12 @@ do
 			local at = itemTypes[aType] or 99
 			local bt = itemTypes[bType] or 99
 			if at ~= bt then return at < bt end
+			if aRarity ~= bRarity then return aRarity > bRarity end
+            aLvl = aLvl or 0; bLvl = bLvl or 0
+            if aLvl ~= bLvl then return aLvl > bLvl end
 			local as = (itemSubTypes[aType] and itemSubTypes[aType][aSubType]) or 99
 			local bs = (itemSubTypes[bType] and itemSubTypes[bType][bSubType]) or 99
 			if as ~= bs then return as < bs end
-			if aRarity ~= bRarity then return aRarity > bRarity end
 			return NameTiebreak(a, b)
 		end
 		
@@ -270,11 +274,11 @@ do
 		local at = itemTypes[aType] or 99
 		local bt = itemTypes[bType] or 99
 		if at ~= bt then return at < bt end
+		aLvl = aLvl or 0; bLvl = bLvl or 0
+		if aLvl ~= bLvl then return aLvl > bLvl end
 		local as = (itemSubTypes[aType] and itemSubTypes[aType][aSubType]) or 99
 		local bs = (itemSubTypes[bType] and itemSubTypes[bType][bSubType]) or 99
 		if as ~= bs then return as < bs end
-		aLvl = aLvl or 0; bLvl = bLvl or 0
-		if aLvl ~= bLvl then return aLvl > bLvl end
 		return NameTiebreak(a, b)
 	end
 
@@ -546,6 +550,7 @@ function A.GPH_Sort_Rarity(a, b)
     if (b and b.isProtected) and not (a and a.isProtected) then return false end
     local ao, bo = A.RaritySortOrder(a and a.quality), A.RaritySortOrder(b and b.quality)
     if type(ao) == "number" and type(bo) == "number" and ao ~= bo then return ao > bo end
+    if a and b and (a.itemLevel or 0) ~= (b.itemLevel or 0) then return (a.itemLevel or 0) > (b.itemLevel or 0) end
     local an = (a and type(a.name) == "string" and a.name) or ""
     local bn = (b and type(b.name) == "string" and b.name) or ""
     return an < bn
@@ -561,6 +566,7 @@ function A.GPH_Sort_Vendor(a, b)
     if a and b and a.sellPrice ~= b.sellPrice then return (a.sellPrice or 0) > (b.sellPrice or 0) end
     local ao, bo = A.RaritySortOrder(a and a.quality), A.RaritySortOrder(b and b.quality)
     if type(ao) == "number" and type(bo) == "number" and ao ~= bo then return ao > bo end
+    if a and b and (a.itemLevel or 0) ~= (b.itemLevel or 0) then return (a.itemLevel or 0) > (b.itemLevel or 0) end
     local an = (a and type(a.name) == "string" and a.name) or ""
     local bn = (b and type(b.name) == "string" and b.name) or ""
     return an < bn
@@ -593,6 +599,7 @@ function A.GPH_Sort_CategoryGroup(a, b)
     if (b and b.isProtected) and not (a and a.isProtected) then return false end
     local ao, bo = A.RaritySortOrder(a and a.quality), A.RaritySortOrder(b and b.quality)
     if type(ao) == "number" and type(bo) == "number" and ao ~= bo then return ao > bo end
+    if a and b and (a.itemLevel or 0) ~= (b.itemLevel or 0) then return (a.itemLevel or 0) > (b.itemLevel or 0) end
     local an = (a and type(a.name) == "string" and a.name) or ""
     local bn = (b and type(b.name) == "string" and b.name) or ""
     return an < bn
@@ -611,8 +618,9 @@ function A.GPH_Sort_CategoryPass(a, b)
     local ao, bo = 999, 999
     for i, c in ipairs(GPH_CATEGORY_ORDER) do if c == at then ao = i; break end end
     for i, c in ipairs(GPH_CATEGORY_ORDER) do if c == bt then bo = i; break end end
-    if ao ~= bo then return ao < bo end
+	if ao ~= bo then return ao < bo end
     if a and b and (a.quality or 0) ~= (b.quality or 0) then return (a.quality or 0) > (b.quality or 0) end
+    if a and b and (a.itemLevel or 0) ~= (b.itemLevel or 0) then return (a.itemLevel or 0) > (b.itemLevel or 0) end
     local an = (a and type(a.name) == "string" and a.name) or ""
     local bn = (b and type(b.name) == "string" and b.name) or ""
     return an < bn
@@ -670,6 +678,12 @@ function A.OrganizeBagCategories(itemList, frame, sortMode, DB, poolFunc)
                         end
                     end
                 end
+            end
+            if itemType and type(itemType) == "string" and itemType:upper():match("OBSOLETE") then
+                itemType = "Miscellaneous"
+            end
+            if item.bag == -2 then
+                itemType = "Keys"
             end
             item.itemType = itemType
         end

@@ -94,18 +94,78 @@ local function ColorText(text, r, g, b)
 end
 
 local itemInfoCache = {}
-function A.GetCachedItemInfo(itemId)
+local tooltipScanner
+
+local function StripColorCodes(text)
+    if not text then return "" end
+    return text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+end
+
+function A.GetCachedItemInfo(itemId, bag, slot)
     if not itemId then return nil end
-    local cached = itemInfoCache[itemId]
+    
+    local cacheKey = itemId
+    if bag and slot then
+        cacheKey = tostring(itemId) .. "_b" .. tostring(bag) .. "_s" .. tostring(slot)
+    end
+    
+    local cached = itemInfoCache[cacheKey]
     if cached then 
         return cached[1], cached[2], cached[3], cached[4], cached[5], cached[6], cached[7], cached[8], cached[9], cached[10], cached[11]
     end
     
     local name, link, quality, iLevel, reqLevel, itemType, itemSubType, maxStack, itemEquipLoc, texture, sellPrice = GetItemInfo(itemId)
+    
+    if link and IsAscension and IsAscension() then
+        if not tooltipScanner then
+            tooltipScanner = CreateFrame("GameTooltip", "FugaziBAGS_ItemLevelScanner", UIParent, "GameTooltipTemplate")
+        end
+        tooltipScanner:SetOwner(UIParent, "ANCHOR_NONE")
+        tooltipScanner:ClearLines()
+        
+        if bag and slot then
+            tooltipScanner:SetBagItem(bag, slot)
+        else
+            local scanLink = (type(itemId) == "string") and itemId or link
+            tooltipScanner:SetHyperlink(scanLink)
+        end
+        local numLines = tooltipScanner:NumLines() or 30
+        for i = 2, numLines do
+            local fs = _G["FugaziBAGS_ItemLevelScannerTextLeft"..i]
+            if fs then
+                local text = fs:GetText()
+                if text then
+                    text = StripColorCodes(text)
+                    local scannedLevel = text:match("Item Level (%d+)")
+                    if scannedLevel then
+                        iLevel = tonumber(scannedLevel)
+                        break
+                    end
+                end
+            end
+        end
+        tooltipScanner:Hide()
+    end
+
     if name then
-        itemInfoCache[itemId] = {name, link, quality, iLevel, reqLevel, itemType, itemSubType, maxStack, itemEquipLoc, texture, sellPrice}
+        itemInfoCache[cacheKey] = {name, link, quality, iLevel, reqLevel, itemType, itemSubType, maxStack, itemEquipLoc, texture, sellPrice}
     end
     return name, link, quality, iLevel, reqLevel, itemType, itemSubType, maxStack, itemEquipLoc, texture, sellPrice
+end
+
+function A.ClearItemInfoCache(itemID)
+    if not itemID then
+        wipe(itemInfoCache)
+        return
+    end
+    local targetID = tostring(itemID)
+    for k in pairs(itemInfoCache) do
+        if type(k) == "string" and k:match("item:"..targetID..":") then
+            itemInfoCache[k] = nil
+        elseif type(k) == "number" and k == itemID then
+            itemInfoCache[k] = nil
+        end
+    end
 end
 
 --- Format quality counts into a colored string.
@@ -187,6 +247,9 @@ local function ClearBagLinkCache(bagID)
         for slot = 1, 100 do
             _bagLinkCache[prefix + slot] = nil
         end
+    end
+    if A.Search and A.Search.ClearTooltipCache then
+        A.Search.ClearTooltipCache()
     end
 end
 local scanTooltip = nil
@@ -406,13 +469,13 @@ local function SaveFrameLayout(frame, shownKey, pointKey)
     if not frame then return end
     local SV = _G.FugaziBAGSDB
     if not SV then SV = {}; _G.FugaziBAGSDB = SV end
-    local left, top = frame:GetLeft(), frame:GetTop()
-    if left and top then
+    local left, bottom = frame:GetLeft(), frame:GetBottom()
+    if left and bottom then
         SV[pointKey] = SV[pointKey] or {}
-        SV[pointKey].point = "TOPLEFT"
+        SV[pointKey].point = "BOTTOMLEFT"
         SV[pointKey].relativePoint = "BOTTOMLEFT"
         SV[pointKey].x = left
-        SV[pointKey].y = top
+        SV[pointKey].y = bottom
         SV[pointKey].w = frame:GetWidth()
         SV[pointKey].h = frame:GetHeight()
     end
@@ -1026,7 +1089,7 @@ function A.CreateBagSpaceIndicator(f, parent, isBank)
                 GameTooltip:AddLine("Ctrl+LMB: Toggle bank bags", 0.6, 0.6, 0.6)
                 GameTooltip:AddLine("LMB: Place item in first free slot", 0.6, 0.6, 0.6)
             else
-                GameTooltip:AddLine("Ctrl+LMB: Manage Bags & Keys (Grid Mode).", 0.6, 0.6, 0.6)
+                GameTooltip:AddLine("Ctrl+LMB: Manage Bags & Keys.", 0.6, 0.6, 0.6)
             end
         end
         GameTooltip:Show()
@@ -1276,14 +1339,20 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
                 local bf = A.Bank
                 local gbf = _G.GuildBankFrame
                 local mf = _G.MailFrame
-                if (bf and bf:IsShown()) or (gbf and gbf:IsShown()) or (mf and mf:IsShown()) then
+                if f.isBankFrame then
+                    A.RarityMoveJob = { mode = "bank_to_bags", category = self.categoryName }
+                    if A.RarityMoveWorker then A.RarityMoveWorker._t = 0; A.RarityMoveWorker:Show() end
+                    return
+                elseif (bf and bf:IsShown()) or (gbf and gbf:IsShown()) or (mf and mf:IsShown()) then
                     local mode = (gbf and gbf:IsShown()) and "bags_to_guildbank" or ((bf and bf:IsShown()) and "bags_to_bank" or "bags_to_mail")
                     A.RarityMoveJob = { mode = mode, category = self.categoryName }
                     if A.RarityMoveWorker then A.RarityMoveWorker._t = 0; A.RarityMoveWorker:Show() end
                     return
                 end
             end
-            if clickHandler then clickHandler(self) end
+            if button == "LeftButton" then
+                if clickHandler then clickHandler(self) end
+            end
         end)
         
         div:SetScript("OnEnter", function(self)
@@ -1293,7 +1362,12 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
             local atBank = (A.Bank and A.Bank:IsShown()) or (_G.GuildBankFrame and _G.GuildBankFrame:IsShown())
             local atMail = _G.MailFrame and _G.MailFrame:IsShown()
             if atBank or atMail then
-                local loc = (atBank and (_G.GuildBankFrame and _G.GuildBankFrame:IsShown() and "Guild/Realm Bank" or "Bank")) or "Mailbox"
+                local loc = "Mailbox"
+                if f.isBankFrame then
+                    loc = "Bags"
+                elseif atBank then
+                    loc = _G.GuildBankFrame and _G.GuildBankFrame:IsShown() and "Guild/Realm Bank" or "Bank"
+                end
                 GameTooltip:AddLine("Shift+RMB: Move category to " .. loc, 0.6, 1, 0.6)
             end
             GameTooltip:Show()
@@ -1320,10 +1394,13 @@ function A.GPH_RenderCategoryDivider(f, content, entry, yOff, clickHandler)
     
     yOff = yOff + 4
     div:SetParent(content)
-    div:ClearAllPoints()
-    div:SetPoint("TOPLEFT", content, "TOPLEFT", f.isBankFrame and 4 or 0, -yOff)
-    div:SetPoint("TOPRIGHT", content, "TOPRIGHT", f.isBankFrame and -4 or 0, -yOff)
-    div:SetHeight(16)
+    if div._gphCurrentYOff ~= yOff then
+        div:ClearAllPoints()
+        div:SetPoint("TOPLEFT", content, "TOPLEFT", f.isBankFrame and 4 or 0, -yOff)
+        div:SetPoint("TOPRIGHT", content, "TOPRIGHT", f.isBankFrame and -4 or 0, -yOff)
+        div:SetHeight(16)
+        div._gphCurrentYOff = yOff
+    end
     
     if isDelete then
         div.label:SetText("Autodelete")
@@ -1466,105 +1543,189 @@ local _inventoryDataCache = {}
 --- Performs a unified scan of specified bags and returns aggregated item data.
 --- @param bagList table Array of bag IDs to scan.
 --- @return table aggregated (itemID -> data), number usedSlots, number totalSlots
+function A.BuildBagSlotMemory(bag, typeCache)
+    A.gphSlotMemory = A.gphSlotMemory or {}
+    A.gphSlotMemory[bag] = A.gphSlotMemory[bag] or {}
+    local nSlots = (GetContainerNumSlots and GetContainerNumSlots(bag)) or 0
+    
+    -- Clear out any slots that might be past the current bag size (e.g. if bag was swapped)
+    for slot = nSlots + 1, 100 do
+        if A.gphSlotMemory[bag][slot] then
+            A.gphSlotMemory[bag][slot].link = nil
+            A.gphSlotMemory[bag][slot].itemId = nil
+        end
+    end
+
+    for slot = 1, nSlots do
+        local link = A.GetCachedBagLink and A.GetCachedBagLink(bag, slot) or (GetContainerItemLink and GetContainerItemLink(bag, slot))
+        local texture, count = nil, 0
+        if GetContainerItemInfo then
+            local t1, t2, t3, t4, t5 = GetContainerItemInfo(bag, slot)
+            texture = t1
+            if type(t2) == "number" and t2 > 0 then count = t2
+            elseif type(t3) == "number" and t3 > 0 then count = t3
+            elseif type(t4) == "number" and t4 > 0 then count = t4
+            elseif type(t5) == "number" and t5 > 0 then count = t5
+            end
+        end
+        if link and (count == 0 or not count) then
+            count = (GetContainerItemInfo and select(2, GetContainerItemInfo(bag, slot))) or 1
+        end
+        count = (count and count > 0) and count or 0
+
+        local mem = A.gphSlotMemory[bag][slot] or {}
+        A.gphSlotMemory[bag][slot] = mem
+        
+        if link then
+            mem.link = link
+            mem.count = count
+            mem.bag = bag
+            mem.slot = slot
+            local itemId = tonumber(link:match("item:(%d+)"))
+            mem.itemId = itemId
+            if itemId then
+                local name, _, quality, iLevel, _, itemType, itemSubType, _, itemEquipLoc, tex, sellPrice = A.GetCachedItemInfo(link, bag, slot)
+                quality = quality or 0
+                
+                local isProtected = (A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, quality)) or false
+                if bag == -2 then
+                    itemType = "Keys"
+                elseif itemId == A.HEARTHSTONE_ID then
+                    itemType = "HIDDEN_FIRST"
+                elseif isProtected then
+                    itemType = "BAG_PROTECTED"
+                else
+                    local isQuest = false
+                    if GetContainerItemQuestInfo and bag and slot then
+                        local isQ = GetContainerItemQuestInfo(bag, slot)
+                        if isQ then isQuest = true end
+                    end
+                    
+                    if isQuest then
+                        itemType = "Quest"
+                    elseif itemType == "Generic(OBSOLETE)" or itemSubType == "Generic(OBSOLETE)" then
+                        itemType = "Miscellaneous"
+                    elseif quality == 0 then
+                        itemType = "Miscellaneous"
+                    elseif itemSubType == "Reagent" then
+                        itemType = "Trade Goods"
+                    else
+                        if not typeCache[itemId] then
+                            if name and name ~= "" and name ~= "Unknown" then
+                                itemType = (itemType and itemType ~= "" and itemType) or "Other"
+                                typeCache[itemId] = itemType
+                            else
+                                itemType = (itemType and itemType ~= "" and itemType) or "Other"
+                            end
+                        else
+                            itemType = typeCache[itemId]
+                        end
+                    end
+                end
+                
+                mem.texture = tex or texture
+                mem.name = name or "Unknown"
+                mem.quality = quality
+                mem.sellPrice = sellPrice or 0
+                mem.itemLevel = iLevel or 0
+                mem.itemType = itemType
+                
+                local isEquip = false
+                if itemEquipLoc and itemEquipLoc ~= "" and itemEquipLoc ~= "INVTYPE_BAG" and itemEquipLoc ~= "INVTYPE_TABARD" and itemEquipLoc ~= "INVTYPE_BODY" then
+                    isEquip = true
+                end
+                mem.isEquip = isEquip
+            end
+        else
+            mem.link = nil
+            mem.itemId = nil
+        end
+    end
+end
+
 function A.GetInventoryData(bagList)
     local cacheKey = table.concat(bagList, ",")
-    if not A._gphBagSpaceDirty and _inventoryDataCache[cacheKey] then
+    
+    local hasDirty = false
+    if A._gphDirtyBags then
+        for _, bag in ipairs(bagList) do
+            if A._gphDirtyBags[bag] then hasDirty = true; break end
+        end
+    end
+    
+    if not A._gphBagSpaceDirty and not hasDirty and _inventoryDataCache[cacheKey] then
         local c = _inventoryDataCache[cacheKey]
         return c.agg, c.used, c.total
     end
 
-    local aggregated = {}
-    local usedSlots, totalSlots = 0, 0
+    A.gphSlotMemory = A.gphSlotMemory or {}
     local SV = _G.FugaziBAGSDB or {}
     local typeCache = SV.gphItemTypeCache or {}
     SV.gphItemTypeCache = typeCache
     
+    if A._gphBagSpaceDirty then
+        for _, bag in ipairs(bagList) do
+            A.BuildBagSlotMemory(bag, typeCache)
+        end
+    else
+        for _, bag in ipairs(bagList) do
+            if not A.gphSlotMemory[bag] or (A._gphDirtyBags and A._gphDirtyBags[bag]) then
+                A.BuildBagSlotMemory(bag, typeCache)
+                if A._gphDirtyBags then A._gphDirtyBags[bag] = nil end
+            end
+        end
+    end
+
+    local aggregated = {}
+    local usedSlots, totalSlots = 0, 0
+    
     for _, bag in ipairs(bagList) do
         local nSlots = (GetContainerNumSlots and GetContainerNumSlots(bag)) or 0
         totalSlots = totalSlots + nSlots
-        for slot = 1, nSlots do
-            local link = A.GetCachedBagLink and A.GetCachedBagLink(bag, slot) or (GetContainerItemLink and GetContainerItemLink(bag, slot))
-            local texture, count = nil, 0
-            if GetContainerItemInfo then
-                local t1, t2, t3, t4, t5 = GetContainerItemInfo(bag, slot)
-                texture = t1
-                if type(t2) == "number" and t2 > 0 then count = t2
-                elseif type(t3) == "number" and t3 > 0 then count = t3
-                elseif type(t4) == "number" and t4 > 0 then count = t4
-                elseif type(t5) == "number" and t5 > 0 then count = t5
-                end
-            end
-            if link and (count == 0 or not count) then
-                count = (GetContainerItemInfo and select(2, GetContainerItemInfo(bag, slot))) or 1
-            end
-            count = (count and count > 0) and count or 0
-            
-            if link then
-                usedSlots = usedSlots + 1
-                local itemId = tonumber(link:match("item:(%d+)"))
-                if itemId then
-                    if not aggregated[itemId] then
-                        local name, _, quality, iLevel, _, itemType, itemSubType, _, _, tex, sellPrice = A.GetCachedItemInfo(link)
-                        quality = quality or 0
-                        
-                        -- Categorization logic (Centralized from RefreshGPHUI/RefreshBankUI)
-                        local isProtected = (A.IsItemProtectedAPI and A.IsItemProtectedAPI(itemId, quality)) or false
-                        if itemId == A.HEARTHSTONE_ID then
-                            itemType = "HIDDEN_FIRST"
-                        elseif isProtected then
-                            itemType = "BAG_PROTECTED"
-                        else
-                            -- Check if it's a quest item via Blizzard's quest API
-                            local isQuest = false
-                            if GetContainerItemQuestInfo and bag and slot then
-                                local isQ = GetContainerItemQuestInfo(bag, slot)
-                                if isQ then isQuest = true end
-                            end
-                            
-                            if isQuest then
-                                itemType = "Quest"
-                            elseif quality == 0 then
-                                itemType = "Miscellaneous"
-                            elseif itemSubType == "Reagent" then
-                                itemType = "Trade Goods"
-                            else
-                                if not typeCache[itemId] then
-                                    -- Only write to type cache if the item details have loaded (name is valid)
-                                    if name and name ~= "" and name ~= "Unknown" then
-                                        itemType = (itemType and itemType ~= "" and itemType) or "Other"
-                                        typeCache[itemId] = itemType
-                                    else
-                                        -- Item details not loaded yet, temporarily use itemType or Other without caching
-                                        itemType = (itemType and itemType ~= "" and itemType) or "Other"
-                                    end
-                                else
-                                    itemType = typeCache[itemId]
-                                end
-                            end
+        local bagMem = A.gphSlotMemory[bag]
+        if bagMem then
+            for slot = 1, nSlots do
+                local item = bagMem[slot]
+                if item and item.link then
+                    usedSlots = usedSlots + 1
+                    local itemId = item.itemId
+                    if itemId then
+                        if not aggregated[itemId] then
+                            local agg = {}
+                            agg.totalCount = 0
+                            agg.firstBag = item.bag
+                            agg.firstSlot = item.slot
+                            agg.link = item.link
+                            agg.texture = item.texture
+                            agg.name = item.name
+                            agg.quality = item.quality
+                            agg.itemId = itemId
+                            agg.sellPrice = item.sellPrice
+                            agg.itemLevel = item.itemLevel
+                            agg.itemType = item.itemType
+                            agg.isEquip = item.isEquip
+                            aggregated[itemId] = agg
                         end
-
-                        local agg = {} -- No recycling for cached inventory data entries
-                        agg.totalCount = 0
-                        agg.firstBag = bag
-                        agg.firstSlot = slot
-                        agg.link = link
-                        agg.texture = tex or texture
-                        agg.name = name or "Unknown"
-                        agg.quality = quality
-                        agg.itemId = itemId
-                        agg.sellPrice = sellPrice or 0
-                        agg.itemLevel = iLevel or 0
-                        agg.itemType = itemType
-                        aggregated[itemId] = agg
+                        aggregated[itemId].totalCount = aggregated[itemId].totalCount + item.count
                     end
-                    aggregated[itemId].totalCount = aggregated[itemId].totalCount + count
                 end
             end
         end
     end
     
     _inventoryDataCache[cacheKey] = { agg = aggregated, used = usedSlots, total = totalSlots }
-    A._gphBagSpaceDirty = false -- Reset dirty flag after successful aggregation
+    
+    -- Clean up dirty flags if we just processed them
+    local anyDirtyLeft = false
+    if A._gphDirtyBags then
+        for k, v in pairs(A._gphDirtyBags) do
+            if v then anyDirtyLeft = true; break end
+        end
+    end
+    if not anyDirtyLeft then
+        A._gphBagSpaceDirty = false
+    end
+    
     return aggregated, usedSlots, totalSlots
 end
 
@@ -1618,7 +1779,8 @@ function A.WipeBagLinkCache(bag)
         for i = 0, 100 do
             _bagLinkCache[(bag * 100) + i] = nil
         end
-        A._gphBagSpaceDirty = true
+        A._gphDirtyBags = A._gphDirtyBags or {}
+        A._gphDirtyBags[bag] = true
         wipe(_inventoryDataCache)
     end
 end

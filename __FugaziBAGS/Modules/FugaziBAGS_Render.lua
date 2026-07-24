@@ -20,11 +20,14 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 		item.itemId = rowItemId
 	end
 	
-    local hideIcons = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphHideIconsInList
+	local hideIcons = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphHideIconsInList
 	local customFormatting = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsCustom
 	local formattingAlpha = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsAlpha or 1.0
 	local iconSize = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsIconSize or 16
 	local fontSize = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsFontSize or 11
+    
+    local effectiveProtected = item.isProtected
+    local effectiveDestroy = isBank and false or item.isDestroy
 
 	-- Visual State Cache check
 	local fontPath = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsFont or ""
@@ -36,13 +39,19 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
     local activeDel = (GetTime() - lastClickValue) <= 1.0
 	local isUnlearnedWardrobe = false
 	if _G.C_Appearance and _G.C_AppearanceCollection and rowItemId then
-		local appID = _G.C_Appearance.GetItemAppearanceID(rowItemId)
-		if appID and not _G.C_AppearanceCollection.IsAppearanceCollected(appID) then
-			isUnlearnedWardrobe = true
-		end
+        if not A._gphWardrobeCache then A._gphWardrobeCache = {} end
+        if A._gphWardrobeCache[rowItemId] == nil then
+		    local appID = _G.C_Appearance.GetItemAppearanceID(rowItemId)
+		    if appID and not _G.C_AppearanceCollection.IsAppearanceCollected(appID) then
+			    A._gphWardrobeCache[rowItemId] = true
+            else
+                A._gphWardrobeCache[rowItemId] = false
+		    end
+        end
+        isUnlearnedWardrobe = A._gphWardrobeCache[rowItemId]
 	end
 
-	if state.id == rowItemId and state.count == item.count and state.link == item.link and state.prot == item.isProtected and state.destroy == item.isDestroy and state.hideIcons == hideIcons and state.customFormatting == customFormatting and state.formattingAlpha == formattingAlpha and state.iconSize == iconSize and state.fontSize == fontSize and state.fontPath == fontPath and state.activeDel == activeDel and state.isUnlearnedWardrobe == isUnlearnedWardrobe then
+	if state.id == rowItemId and state.count == item.count and state.link == item.link and state.prot == effectiveProtected and state.destroy == effectiveDestroy and state.hideIcons == hideIcons and state.customFormatting == customFormatting and state.formattingAlpha == formattingAlpha and state.iconSize == iconSize and state.fontSize == fontSize and state.fontPath == fontPath and state.activeDel == activeDel and state.isUnlearnedWardrobe == isUnlearnedWardrobe then
 		-- Identity is the same
 		return
 	end
@@ -50,8 +59,8 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 	state.count = item.count
 	state.link = item.link
     state.activeDel = activeDel
-	state.prot = item.isProtected
-	state.destroy = item.isDestroy
+	state.prot = effectiveProtected
+	state.destroy = effectiveDestroy
 	state.hideIcons = hideIcons
 	state.customFormatting = customFormatting
 	state.formattingAlpha = formattingAlpha
@@ -61,6 +70,8 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 	state.isUnlearnedWardrobe = isUnlearnedWardrobe
 	
 	local isOnDestroyList = rowItemId and destroyList and destroyList[rowItemId]
+    if isBank then isOnDestroyList = false end
+    
 	local hearthId = A.HEARTHSTONE_ID
 	local isHearth = (rowItemId == hearthId)
 	-- hideIcons already retrieved above for cache check
@@ -79,7 +90,7 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 			elseif isHearth then
 				if row.icon.SetDesaturated then row.icon:SetDesaturated(false) end
 				row.icon:SetVertexColor(1, 1, 1)
-			elseif item.isProtected then
+			elseif effectiveProtected then
 				if row.icon.SetDesaturated then row.icon:SetDesaturated(false) end
 				row.icon:SetVertexColor(0.65, 0.65, 0.65)
 			else
@@ -99,7 +110,7 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 			row.prevWornIcon:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 			if isOnDestroyList then
 				row.prevWornIcon:SetVertexColor(0.55, 0.55, 0.55)
-			elseif item.isProtected then
+			elseif effectiveProtected then
 				row.prevWornIcon:SetVertexColor(0.65, 0.65, 0.65)
 			else
 				row.prevWornIcon:SetVertexColor(1, 1, 1)
@@ -129,9 +140,36 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 	elseif isHearth then
 		nameHex = "d9ebff"
 	else
-		nameHex = A.GetItemNameHex(qual, item.isProtected, qInfo)
+		nameHex = A.GetItemNameHex(qual, effectiveProtected, qInfo)
 	end
+    local isEquip = item.isEquip
+    local ilvlStr = ""
+    if isEquip and item.itemLevel and item.itemLevel > 1 then
+        ilvlStr = tostring(item.itemLevel)
+    end
+
+    if not hideIcons then
+        if not row.iconIlvlFs and row.clickArea then
+            row.iconIlvlFs = row.clickArea:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+            row.iconIlvlFs:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", -1, 1)
+            row.iconIlvlFs:SetTextColor(0.5, 1.0, 0.5)
+        end
+        if row.iconIlvlFs then
+            if isEquip and ilvlStr ~= "" then
+                row.iconIlvlFs:SetText(ilvlStr)
+                row.iconIlvlFs:Show()
+            else
+                row.iconIlvlFs:Hide()
+            end
+        end
+    else
+        if row.iconIlvlFs then row.iconIlvlFs:Hide() end
+    end
+
 	local plainName = item.name or "Unknown"
+    if hideIcons and isEquip and ilvlStr ~= "" then
+        plainName = "(" .. ilvlStr .. ") " .. plainName
+    end
 	row._plainName = plainName
 	row._nameHex = nameHex
 	if row.nameFs then
@@ -197,11 +235,7 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 	
 	if row.protectedOverlay then
 		if isBank then
-			if item.isProtected or item.previouslyWorn then
-				row.protectedOverlay:Show()
-			else
-				row.protectedOverlay:Hide()
-			end
+			row.protectedOverlay:Hide()
 			if row.protectedKeyIcon then row.protectedKeyIcon:Hide() end
 		else
 			local capturedId = rowItemId
@@ -220,8 +254,7 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 
             local rowFormattingEnabled = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsCustom
 			if ((item.isProtected and not isHearth) or isManuallyProtected) and not rowFormattingEnabled then
-				row.protectedOverlay:Show()
-				row.protectedOverlay:SetAlpha(pendingDim and 0.45 or 0.85)
+				row.protectedOverlay:Hide()
 				if row.protectedKeyIcon then
 					if isPrevWorn then
 						row.protectedKeyIcon:Hide()
@@ -285,29 +318,15 @@ function A.FugaziBAGS_CheckRowCooldown(btn, item, idToSlot)
     if bag and slot and GetContainerItemCooldown then
         local cStart, cDur = GetContainerItemCooldown(bag, slot)
         if cDur and cDur > 0 then
-            local now = GetTime()
-            local ends = (cStart or 0) + cDur
-            if ends > now then
-                onCooldown = true
-                local remain = ends - now
-                frac = math.min(1, math.max(0, remain / cDur))
-            end
-        end
-    end
-
-    -- 2. GCD FALLBACK
-    if not onCooldown and capturedId then
-        local itemLink = item and item.link
-        local hasSpell = itemLink and GetItemSpell(itemLink)
-        if hasSpell then
-            local sStart, sDur = GetSpellCooldown(61304)
-            if sDur and sDur > 0 and sDur <= 1.5 then
+            -- Ignore GCDs triggered by spells (not clicked in bag)
+            local isRecentBagClick = A._gphLastItemUseTime and (GetTime() - A._gphLastItemUseTime) <= 2.0
+            if cDur > 1.5 or isRecentBagClick then
                 local now = GetTime()
-                local ends = sStart + sDur
+                local ends = (cStart or 0) + cDur
                 if ends > now then
                     onCooldown = true
-                    isGCD = true
-                    frac = (ends - now) / sDur
+                    local remain = ends - now
+                    frac = math.min(1, math.max(0, remain / cDur))
                 end
             end
         end
@@ -371,17 +390,20 @@ function A.FugaziRow_OnUpdateCooldown(self, elapsed)
 end
 
 --- Update one inventory row: icon, count, name, cooldown, protected/destroy state.
-function A.UpdateGPHRowVisuals(btn, item, itemIdx, yOff, rowBelowDivider, destroyList, gphFrame, idToSlot)
-    local dynW = gphFrame.gphDynContentWidth
-    if dynW and dynW > 50 then btn:SetWidth(dynW - 8) end
-    
-    btn:ClearAllPoints()
-    btn:SetPoint("TOPLEFT", btn:GetParent(), "TOPLEFT", 4, -yOff)
-    btn:SetPoint("TOPRIGHT", btn:GetParent(), "TOPRIGHT", -4, -yOff)
+function A.UpdateGPHRowVisuals(btn, item, itemIdx, yOff, rowBelowDivider, destroyList, gphFrame, idToSlot, skipAnchoring)
+    if not skipAnchoring then
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", btn:GetParent(), "TOPLEFT", 4, -yOff)
+        btn:SetPoint("TOPRIGHT", btn:GetParent(), "TOPRIGHT", -4, -yOff)
+    end
+
+
 
     local rowStep = A.ComputeItemDetailsRowHeight(18)
-    btn:SetHeight(rowStep)
-    if btn.clickArea then btn.clickArea:SetHeight(rowStep) end
+    if btn:GetHeight() ~= rowStep then
+        btn:SetHeight(rowStep)
+        if btn.clickArea then btn.clickArea:SetHeight(rowStep) end
+    end
 
     -- Reset hit rects (utilities and skinning handle specialized spacing)
     btn:SetHitRectInsets(0, 0, 0, 0)
@@ -432,6 +454,19 @@ function A.UpdateGPHRowVisuals(btn, item, itemIdx, yOff, rowBelowDivider, destro
     if btn.clickArea then
         btn.clickArea.bag, btn.clickArea.slot = actualBag, actualSlot
         btn.clickArea:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
+
+    local isLocked = false
+    if A.lockedDisenchantSlots and actualBag and actualSlot then
+        if A.lockedDisenchantSlots[tostring(actualBag) .. "_" .. tostring(actualSlot)] then
+            isLocked = true
+        end
+    end
+
+    if isLocked or (A.activeDisenchantSlot and A.activeDisenchantSlot.itemId == capturedId) then
+        btn:SetAlpha(0.3)
+    else
+        btn:SetAlpha(1.0)
     end
 
     if not btn._scriptsBound then
@@ -509,4 +544,24 @@ function A.UpdateGPHRowVisuals(btn, item, itemIdx, yOff, rowBelowDivider, destro
     end
     
     -- Modifier Overlay is now managed dynamically in Actions.HandleBagSlotEnter
+end
+
+function A.UpdateAllRowCooldowns()
+    local framesToUpdate = { A.Inventory, A.Bank }
+    for _, gphFrame in ipairs(framesToUpdate) do
+        if gphFrame and gphFrame:IsShown() and gphFrame.content then
+            local idToSlot = gphFrame._gphIdToSlotMap or {}
+            local children = { gphFrame.content:GetChildren() }
+            for _, btn in ipairs(children) do
+                if btn:IsShown() and btn.cachedItem and btn.cooldownOverlay then
+                    if A.FugaziBAGS_CheckRowCooldown(btn, btn.cachedItem, idToSlot) then
+                        btn:SetScript("OnUpdate", A.FugaziRow_OnUpdateCooldown)
+                    else
+                        btn:SetScript("OnUpdate", nil)
+                        btn.cooldownOverlay:Hide()
+                    end
+                end
+            end
+        end
+    end
 end

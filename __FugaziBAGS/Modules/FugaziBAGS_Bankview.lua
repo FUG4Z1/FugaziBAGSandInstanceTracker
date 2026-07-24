@@ -1,18 +1,6 @@
 local addonName, Addon = ...
 local A = _G.FugaziBAGS or Addon
 
-local function FugaziBankRow_OnUpdateCooldown(self, elapsed)
-	self._cdTimer = (self._cdTimer or 0) + elapsed
-	if self._cdTimer >= 0.1 then
-		self._cdTimer = 0
-		if A.FugaziBAGS_CheckRowCooldown then
-			local map = self:GetParent():GetParent()._gphIdToSlotMap
-			if not A.FugaziBAGS_CheckRowCooldown(self, self.cachedItem, map) then
-				self:SetScript("OnUpdate", nil)
-			end
-		end
-	end
-end
 -- Fetch DB dynamically inside functions to avoid stale reference issues with SavedVariables.
 
 local MAIN_BANK_SLOTS = 28
@@ -25,7 +13,7 @@ local function BankDebug(msg) if BANK_DEBUG and A.AddonPrint then A.AddonPrint("
 A.BankDebug = BankDebug
 
 -- Forward declarations for local functions
-local GetBankMainContainer, GetBankRow, ResetBankRowPool, ResetBankDataPools, GetBankAggTable, GetBankItemTable
+local GetBankMainContainer, ResetBankDataPools
     
 local function GetPerChar(key, default) return A.GetPerChar(key, default) end
 local function SetPerChar(key, value) A.SetPerChar(key, value) end
@@ -174,7 +162,7 @@ function CreateBankFrame(invFrame)
 
              info = UIDropDownMenu_CreateInfo(); info.text = ""; info.isTitle = true; info.notCheckable = true; UIDropDownMenu_AddButton(info)
 
-             local bankGridMode = A.GetPerChar("gphBankGridMode", false)
+             local bankGridMode = A.GetPerChar("gphBankGridMode", true)
              info = UIDropDownMenu_CreateInfo()
              info.text = (not f.gphGridMode) and "|cff00ff00List View|r" or "List View"
              info.checked = not f.gphGridMode
@@ -375,12 +363,12 @@ function CreateBankFrame(invFrame)
 	local bankHeader = CreateFrame("Frame", nil, f)
 	bankHeader:SetPoint("TOPLEFT", sep, "BOTTOMLEFT", 6, BANK_HEADER_Y_OFF)
 	bankHeader:SetPoint("TOPRIGHT", sep, "TOPRIGHT", -6, BANK_HEADER_Y_OFF)
-	bankHeader:SetHeight(BANK_HEADER_HEIGHT)
+	bankHeader:SetHeight(18)
 	f.bankHeader = bankHeader
 	local bankSpaceBtn = A.CreateBagSpaceIndicator(f, bankHeader, true)
     
+	bankSpaceBtn:SetPoint("BOTTOMLEFT", bankHeader, "BOTTOMLEFT", 0, 8)
     bankSpaceBtn:SetScript("OnClick", function(self, button)
-		if button ~= "LeftButton" then return end
 		if A.PlayClickSound then A.PlayClickSound() end
 		
 		if IsControlKeyDown() and not IsAltKeyDown() then
@@ -457,113 +445,16 @@ function CreateBankFrame(invFrame)
 		return nil, nil
 	end
 	
-	local function getAllBankSlotsForItem(itemId, knownBankBag, knownBankSlot)
-		itemId = tonumber(itemId) or itemId
-		if not itemId then return {} end
-		local list = {}
-		local function addSlot(bagID, slotID, count)
-			list[#list + 1] = { bag = bagID, slot = slotID, count = (count and count > 0) and count or 1 }
-		end
-		local function getCount(bagID, slotID)
-			if not GetContainerItemInfo then return 1 end
-			local t1, t2, t3, t4, t5 = GetContainerItemInfo(bagID, slotID)
-			if type(t2) == "number" and t2 > 0 then return t2 end
-			if type(t3) == "number" and t3 > 0 then return t3 end
-			if type(t4) == "number" and t4 > 0 then return t4 end
-			if type(t5) == "number" and t5 > 0 then return t5 end
-			return 1
-		end
-		if knownBankBag ~= nil and knownBankSlot ~= nil then
-			local tex = GetContainerItemInfo and select(1, GetContainerItemInfo(knownBankBag, knownBankSlot))
-			if tex then addSlot(knownBankBag, knownBankSlot, getCount(knownBankBag, knownBankSlot)) end
-		end
-		local mainBank = GetBankMainContainer()
-		if mainBank then
-			for slot = 1, MAIN_BANK_SLOTS do
-				if knownBankBag == mainBank and knownBankSlot == slot then else
-					local tex = GetContainerItemInfo and select(1, GetContainerItemInfo(mainBank, slot))
-					if tex then
-						local id = (GetContainerItemID and GetContainerItemID(mainBank, slot)) or nil
-						if not id and GetContainerItemLink then
-							local link = GetContainerItemLink(mainBank, slot)
-							if link then id = tonumber(link:match("item:(%d+)")) end
-						end
-						if id and tonumber(id) == tonumber(itemId) then addSlot(mainBank, slot, getCount(mainBank, slot)) end
-					end
-				end
-			end
-		end
-		for i = 1, NUM_BANK_BAGS do
-			local bagID = (NUM_BAG_SLOTS or 4) + i
-			local numSlots = GetContainerNumSlots and GetContainerNumSlots(bagID) or 0
-			for slot = 1, numSlots do
-				if knownBankBag == bagID and knownBankSlot == slot then else
-					local tex = GetContainerItemInfo and select(1, GetContainerItemInfo(bagID, slot))
-					if tex then
-						local id = (GetContainerItemID and GetContainerItemID(bagID, slot)) or nil
-						if not id and GetContainerItemLink then
-							local link = GetContainerItemLink(bagID, slot)
-							if link then id = tonumber(link:match("item:(%d+)")) end
-						end
-						if id and tonumber(id) == tonumber(itemId) then addSlot(bagID, slot, getCount(bagID, slot)) end
-					end
-				end
-			end
-		end
-		return list
-	end
+
 	f.PlaceCursorInFirstFreeBankSlot = placeCursorInFirstFreeBankSlot
 	f.GetFirstFreeBankSlot = getFirstFreeBankSlot
 	f.GetFirstFreeBagSlot = getFirstFreeBagSlot
-	f.GetAllBankSlotsForItem = getAllBankSlotsForItem
+
 	bankSpaceBtn:SetScript("OnReceiveDrag", function() placeCursorInFirstFreeBankSlot() end)
 	f.bankSpaceFs = bankSpaceFs
 	f.bankSpaceBtn = bankSpaceBtn
 	
-	local bankChildReuse = {}
-	local function fillChildReuse(t, ...)
-		for i = 1, select("#", ...) do t[i] = select(i, ...) end
-		return select("#", ...)
-	end
-	local function SyncModifierOverlaysForContent(content, altDown)
-		if not content or not content.GetChildren then return end
-		wipe(bankChildReuse)
-		fillChildReuse(bankChildReuse, content:GetChildren())
-		for i = 1, #bankChildReuse do
-			local row = bankChildReuse[i]
-			local ca = row and row.clickArea
-			local modOv = ca and ca._fugaziModifierOverlay
-			if modOv and modOv.Show and modOv.Hide and modOv.EnableMouse then
-				if altDown and not IsControlKeyDown() then modOv:Show(); modOv:EnableMouse(true) else modOv:Hide(); modOv:EnableMouse(false) end
-			end
-		end
-	end
-	local defaultBankSpaceColor = { 1, 0.85, 0.4, 1 }
-	f:SetScript("OnUpdate", function(self, elapsed)
-		if not self:IsShown() then return end
-		
-		self._throttleT = (self._throttleT or 0) + elapsed
-		if self._throttleT >= 0.1 then
-			self._throttleT = 0
-			pcall(SyncModifierOverlaysForContent, self.content, IsAltKeyDown() and not IsControlKeyDown())
-		
-			if self.bankSpaceBtn then
-				local hasItem = (GetCursorInfo and GetCursorInfo() == "item")
-				if self.bankSpaceBtn.glow then
-					if hasItem then self.bankSpaceBtn.glow:Show() else self.bankSpaceBtn.glow:Hide() end
-				end
-				if self.bankSpaceBtn.fs then
-					if hasItem then
-						self.bankSpaceBtn.fs:SetTextColor(1, 1, 1, 1)
-					else
-						local c = self.bankSpaceTextColor or defaultBankSpaceColor
-						self.bankSpaceBtn.fs:SetTextColor(c[1], c[2], c[3], c[4])
-					end
-				end
-			end
-		end
-	end)
-	
+
 	f.UpdateBankQualBtnVisual = function(bf, btn, q)
 		A.UpdateRarityBtnVisual(bf, btn, q, bf.bankRarityFilter)
 	end
@@ -594,7 +485,7 @@ function CreateBankFrame(invFrame)
 	f.qualityOnEnter = function(self)
 		self.helpLines = {
 			{ "LMB: Filter quality in Bank", 1, 1, 1 },
-			{ "Shift+RMB: Move rarity to Bags", 1, 1, 1 }
+			{ "Shift+RMB: Move rarity to Bags", 0.6, 1.0, 0.6 }
 		}
 		A.GPHQualBtn_OnEnter(self)
 	end
@@ -607,14 +498,15 @@ function CreateBankFrame(invFrame)
 		bankHeader._fugaziBankLayoutHooked = true
 		bankHeader:HookScript("OnSizeChanged", function() 
 			A.LayoutRarityBar(f, bankHeader, qualBtnOnClickHandler)
+            if RefreshBankUI then RefreshBankUI() end
 		end)
 	end
 
 	
 	f.bankScrollOffset = 0
-	local scroll = CreateFrame("ScrollFrame", "TestBankScrollFrame", f, "UIPanelScrollFrameTemplate")
+	local scroll = CreateFrame("ScrollFrame", "FugaziBAGS_BankScrollFrameGPH", f, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", bankHeader, "BOTTOMLEFT", 0, -14) 
-	scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, 6)
+	scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, 20)
     if _G.__FugaziBAGS_Skins and _G.__FugaziBAGS_Skins.SkinScrollBar then
         _G.__FugaziBAGS_Skins.SkinScrollBar(scroll)
     end
@@ -627,8 +519,6 @@ function CreateBankFrame(invFrame)
 			if content then
 				content:ClearAllPoints()
 				content:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, value)
-				content:SetWidth(BANK_LIST_WIDTH)
-				content:SetHeight(content:GetHeight() or 1)
 			end
 		end)
 	end
@@ -649,7 +539,7 @@ function CreateBankFrame(invFrame)
 		end)
 	end
 	local function doScrollWheel(delta)
-		A.HandleMouseWheel(scroll, delta, f, "bankScrollOffset", nil, BANK_LIST_WIDTH)
+		A.HandleMouseWheel(scroll, delta, f, "bankScrollOffset", nil, nil)
 	end
 	content:SetScript("OnMouseWheel", function(self, delta) doScrollWheel(delta) end)
 	scroll:SetScript("OnMouseWheel", function(self, delta) doScrollWheel(delta) end)
@@ -685,283 +575,13 @@ _G.GetBankMainContainer = GetBankMainContainer -- Some logic still calls it glob
 local BANK_ROW_HEIGHT = 18
 
 
---- Clear one bank slot (pickup + clear).
-local function DeleteBankSlot(bagID, slotID)
-	if bagID == nil or slotID == nil then return end
-	if PickupContainerItem and DeleteCursorItem then
-		PickupContainerItem(bagID, slotID)
-		DeleteCursorItem()
-	end
-end
 
-
-local BANK_ROW_POOL, BANK_ROW_POOL_USED = {}, 0
-
---- Return all bank list rows to pool (reuse).
-ResetBankRowPool = function()
-	BANK_ROW_POOL_USED = 0
-end
-
-function CleanupBankRowPool()
-    if not BANK_ROW_POOL then return end
-    A._gphIsCleaning = true -- START GUARD
-    for i = BANK_ROW_POOL_USED + 1, #BANK_ROW_POOL do
-        if BANK_ROW_POOL[i] then BANK_ROW_POOL[i]:Hide() end
-    end
-    A._gphIsCleaning = false -- END GUARD
-end
 
 
 A.ResetBankDataPools = A.ResetGPHDataPools
 ResetBankDataPools = A.ResetBankDataPools
 local BANK_DELETE_X_WIDTH = 16
 
---- Get or create one bank list row (icon, name, count).
-GetBankRow = function(parent)
-	BANK_ROW_POOL_USED = BANK_ROW_POOL_USED + 1
-	local row = BANK_ROW_POOL[BANK_ROW_POOL_USED]
-	if not row then
-		row = CreateFrame("Frame", "BankRow_" .. BANK_ROW_POOL_USED, parent)
-		row:SetWidth(BANK_LIST_WIDTH)
-		row:SetHeight(BANK_ROW_HEIGHT)
-		row:EnableMouse(true)
-		row.deleteBtn = nil
-		local clickArea = CreateFrame("Button", nil, row)
-		clickArea:SetPoint("LEFT", row, "LEFT", 0, 0)
-		clickArea:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-		clickArea:SetHeight(BANK_ROW_HEIGHT)
-		clickArea:EnableMouse(true)
-		clickArea:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-		clickArea:RegisterForDrag("LeftButton")
-		clickArea:SetHitRectInsets(0, 0, 0, 0)
-		clickArea:SetText("")
-		row.clickArea = clickArea
-		local icon = clickArea:CreateTexture(nil, "ARTWORK")
-		icon:SetSize(16, 16)
-		icon:SetPoint("LEFT", clickArea, "LEFT", 0, 0)
-		row.icon = icon
-		
-		local protectedOverlay = clickArea:CreateTexture(nil, "OVERLAY")
-		protectedOverlay:SetAllPoints(clickArea)
-		protectedOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-		protectedOverlay:SetVertexColor(0, 0, 0, 0.38)
-		protectedOverlay:Hide()
-		row.protectedOverlay = protectedOverlay
-		local countFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-		countFs:SetPoint("RIGHT", clickArea, "RIGHT", -2, 0)
-		countFs:SetJustifyH("RIGHT")
-		row.countFs = countFs
-		local nameFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-		nameFs:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-		nameFs:SetPoint("RIGHT", clickArea, "RIGHT", -40, 0)
-		nameFs:SetJustifyH("LEFT")
-		row.nameFs = nameFs
-		local rowHighlight = clickArea:CreateTexture(nil, "BACKGROUND")
-		rowHighlight:SetAllPoints()
-		rowHighlight:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-		rowHighlight:SetVertexColor(1, 1, 1, 0.06)
-		rowHighlight:Hide()
-		row.rowHighlight = rowHighlight
-
-		local cooldownOverlay = clickArea:CreateTexture(nil, "OVERLAY")
-		cooldownOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-		cooldownOverlay:SetPoint("TOPLEFT", clickArea, "TOPLEFT", 0, 0)
-		cooldownOverlay:SetPoint("BOTTOMLEFT", clickArea, "BOTTOMLEFT", 0, 0)
-		cooldownOverlay:SetWidth(0.01)
-		cooldownOverlay:Hide()
-		row.cooldownOverlay = cooldownOverlay
-
-		local pulse = CreateFrame("Frame", nil, clickArea)
-		pulse:SetAllPoints()
-		pulse:SetFrameLevel(clickArea:GetFrameLevel() + 5)
-		local pTex = pulse:CreateTexture(nil, "OVERLAY")
-		pTex:SetAllPoints()
-		pTex:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-		pTex:SetVertexColor(1, 1, 1, 0.7)
-		pulse:Hide()
-		row.pulseTex = pulse
-
-		BANK_ROW_POOL[BANK_ROW_POOL_USED] = row
-	end
-	
-	if row.deleteBtn then
-		row.deleteBtn:Hide()
-		row.deleteBtn:SetParent(nil)
-		row.deleteBtn = nil
-	end
-	row:SetParent(parent)
-	
-	local bf = A.Bank
-	if bf and bf._bankListW then row:SetWidth(bf._bankListW) end
-	row:Show()
-	row.clickArea:Show()
-	if row.pulseTex then row.pulseTex:Hide() end
-	return row
-end
-
-
-
-
-
---- Bank row: mouse down (drag start).
-local function BankRow_clickArea_OnMouseDown(self, mouseButton)
-    local row = self:GetParent()
-    if A.TriggerRowPulse then A.TriggerRowPulse(row) end
-    if not row.bagID or not row.slotID then return end
-
-    -- Store row/scroll so after move (bank->bags) refresh keeps list under cursor like bags do.
-    local bf = A.Bank
-    if bf and bf:IsShown() and row.entryIndex and row._bankRowY then
-        local capturedId = row.itemId or (row.link and tonumber(row.link:match("item:(%d+)")))
-        bf.gphSelectedItemId = capturedId
-        bf.gphSelectedBag = row.bagID
-        bf.gphSelectedSlot = row.slotID
-        bf.gphSelectedIndex = row.entryIndex
-        bf.gphSelectedRowY = row._bankRowY
-        bf.gphScrollOffsetAtClick = bf.bankScrollOffset or 0
-    end
-    if mouseButton == "LeftButton" and IsShiftKeyDown() then
-        local link = GetContainerItemLink and GetContainerItemLink(r.bagID, r.slotID)
-        local totalCount = r.totalCount or (GetContainerItemInfo and select(2, GetContainerItemInfo(r.bagID, r.slotID))) or 1
-        if link and totalCount and totalCount > 1 and A.ShowGPHStackSplit then
-            local itemId = tonumber(link:match("item:(%d+)"))
-            if itemId then A.ShowGPHStackSplit(r.bagID, r.slotID, totalCount, self, itemId, true) end
-            return
-        end
-    end
-end
---- Bank row: click (pickup, swap, modifier actions).
-local function BankRow_clickArea_OnClick(self, button)
-    if A.PlayClickSound then A.PlayClickSound() end
-    local r = self:GetParent()
-    if not r.bagID or not r.slotID then return end
-
-    
-    if button == "LeftButton" and IsAltKeyDown() and not IsControlKeyDown() then
-        local link = GetContainerItemLink and GetContainerItemLink(r.bagID, r.slotID)
-            A.ToggleItemProtection(itemId, link, r)
-        local gf = gphFrame or A.Inventory
-        if gf then gf._refreshImmediate = true end
-        if RefreshGPHUI then RefreshGPHUI() end
-        if _G.FugaziBAGS_ScheduleRefreshBankUI then _G.FugaziBAGS_ScheduleRefreshBankUI() end
-        return
-    end
-
-    
-    if button == "RightButton" and IsShiftKeyDown() then
-        local link = GetContainerItemLink and GetContainerItemLink(r.bagID, r.slotID)
-        if link then
-            if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
-            local chatBox = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
-            if not chatBox then
-                if ChatEdit_ActivateChat and ChatFrame1EditBox then
-                    ChatEdit_ActivateChat(ChatFrame1EditBox)
-                    chatBox = ChatFrame1EditBox
-                else
-                    for ci = 1, NUM_CHAT_WINDOWS do
-                        local eb = _G["ChatFrame" .. ci .. "EditBox"]
-                        if eb then chatBox = eb; break end
-                    end
-                end
-            end
-            if chatBox then
-                chatBox:Insert(link)
-                if chatBox.SetFocus then chatBox:SetFocus() end
-            end
-        end
-        return
-    elseif button == "RightButton" and not IsShiftKeyDown() then
-        if r.bagID ~= nil and r.slotID ~= nil and UseContainerItem then
-            UseContainerItem(r.bagID, r.slotID)
-            local bf = A.Bank
-            if bf and bf:IsShown() and r.entryIndex and r._bankRowY then
-                local capturedId = r.itemId or (r.link and tonumber(r.link:match("item:(%d+)")))
-                bf.gphSelectedItemId = capturedId
-                bf.gphSelectedBag = r.bagID
-                bf.gphSelectedSlot = r.slotID
-                bf.gphSelectedIndex = r.entryIndex
-                bf.gphSelectedRowY = r._bankRowY
-                bf.gphScrollOffsetAtClick = bf.bankScrollOffset or 0
-            end
-            if RefreshBankUI then RefreshBankUI() end
-            if RefreshGPHUI then RefreshGPHUI() end
-        end
-        if r.pulseTex then
-            r.pulseTex:SetVertexColor(1, 1, 1, 0.65)
-            r.pulseTex:Show()
-            if not r._pulseAnimFrame then
-                r._pulseAnimFrame = CreateFrame("Frame")
-            end
-            r._pulseAnimFrame._t = 0
-            r._pulseAnimFrame:SetScript("OnUpdate", function(f, el)
-                f._t = f._t + el
-                if f._t > 0.3 then r.pulseTex:Hide(); f:SetScript("OnUpdate", nil)
-                else r.pulseTex:SetAlpha(0.65 * (1 - f._t/0.3)) end
-            end)
-        end
-        return
-    end
-end
---- Bank row: accept item drag.
-local function BankRow_clickArea_OnReceiveDrag(self)
-    local r = self:GetParent()
-    if GetCursorInfo and GetCursorInfo() == "item" and PickupContainerItem and r.bagID and r.slotID then
-        PickupContainerItem(r.bagID, r.slotID)
-    end
-end
---- Bank row: mouse up (drop).
-local function BankRow_clickArea_OnMouseUp(self, button)
-    if button ~= "LeftButton" then return end
-    if IsAltKeyDown() and not IsControlKeyDown() then return end
-    local r = self:GetParent()
-    if not r.bagID or not r.slotID or not PickupContainerItem then return end
-    if GetCursorInfo and GetCursorInfo() == "item" then
-        PickupContainerItem(r.bagID, r.slotID)
-    end
-end
-
---- Row cooldown tick (update spiral).
-local function FugaziBankRow_OnUpdateCooldown(self, elapsed)
-    self._cdTimer = (self._cdTimer or 0) + elapsed
-    if self.cachedItem and self._cdTimer > 0.25 then
-        self._cdTimer = 0
-        if not A.FugaziBAGS_CheckRowCooldown(self, self.cachedItem) then
-            self:SetScript("OnUpdate", nil)
-        end
-    end
-end
---- Bank row: tooltip + secure button on enter.
-local function BankRow_clickArea_OnEnter(self)
-    local r = self:GetParent()
-    if r.rowHighlight then r.rowHighlight:Show() end
-    
-    if r.clickArea and r.clickArea._fugaziModifierOverlay and IsAltKeyDown() and not IsControlKeyDown() then
-        local modOv = r.clickArea._fugaziModifierOverlay
-        modOv:Show()
-        modOv:EnableMouse(true)
-    end
-    
-    if A.HandleBagSlotEnter then
-        A.HandleBagSlotEnter(self)
-    end
-end
---- Bank row: hide tooltip on leave.
-local function BankRow_clickArea_OnLeave(self)
-    local r = self:GetParent()
-    if r.rowHighlight then r.rowHighlight:Hide() end
-    if A.HandleBagSlotLeave then
-        A.HandleBagSlotLeave(self)
-    else
-        GameTooltip:Hide()
-    end
-end
---- Bank row: mouse wheel scrolls bank list.
-local function BankRow_clickArea_OnMouseWheel(self,  delta)
-    local bf = A.Bank
-    if bf and bf.scrollFrame and bf.scrollFrame.BankOnMouseWheel then
-        bf.scrollFrame.BankOnMouseWheel(delta)
-    end
-end
 
 
 RefreshBankUI = function()
@@ -1010,14 +630,14 @@ RefreshBankUI = function()
 	end
     BankDebug("Step 3: mainBank=" .. tostring(mainBank))
 
-	ResetBankRowPool()
     ResetBankDataPools()
 	
-	local bankListW = BANK_LIST_WIDTH
-	if bf.scrollFrame then
-		local sw = bf.scrollFrame:GetWidth()
-		if sw and sw > 50 then bankListW = sw - 4 end  
-	end
+	local bankListW = bf:GetWidth() - 44
+    if bf.scrollFrame then
+        local sfW = bf.scrollFrame:GetWidth()
+        if sfW and sfW > 50 then bankListW = sfW end
+    end
+    if not bankListW or bankListW < 50 then bankListW = 340 end
 	bf._bankListW = bankListW
 	local content = bf.content
 	if content then 
@@ -1051,7 +671,8 @@ RefreshBankUI = function()
     BankDebug("Step 6: GetInventoryData finished, used=" .. tostring(usedBankSlots))
 
 	for _, agg in pairs(aggregated) do
-        local isProtected = (agg.itemId and A.IsItemProtectedAPI(agg.itemId, agg.quality)) or false
+        -- Bank is a safe space: ignore rarity-wide protection, but respect manual/previouslyWorn protection
+        local isProtected = (agg.itemId and A.IsItemProtectedAPI(agg.itemId, agg.quality, true)) or false
         local isWorn = agg.itemId and A.IsItemWorn(agg.itemId)
         
         local entry = A.GetRecycledBankTable()
@@ -1066,8 +687,10 @@ RefreshBankUI = function()
         entry.count = agg.totalCount
         entry.texture = agg.texture
         entry.itemType = agg.itemType or "Other"
+        entry.isEquip = agg.isEquip
         entry.isProtected = isProtected and true or nil
         entry.previouslyWorn = isWorn and true or nil
+        entry.itemId = agg.itemId
 		slotList[#slotList + 1] = entry
 	end
 	
@@ -1076,12 +699,30 @@ RefreshBankUI = function()
 	
 	BankDebug("Step 7: entry aggregation finished, count=" .. tostring(#slotList))
 	
-	if bf.bankSpaceFs then A.SafeSetText(bf.bankSpaceFs, usedBankSlots .. "/" .. totalBankSlots) end
+	if bf.bankSpaceFs then 
+        A.SafeSetText(bf.bankSpaceFs, usedBankSlots .. "/" .. totalBankSlots) 
+    end
 	bf._bankUsedSlots = usedBankSlots
 	
     -- Apply Skin then Customizations
     if bf.ApplySkin then bf:ApplySkin() end
     if _G.ApplyBankCustomize then _G.ApplyBankCustomize(bf) end
+    
+    -- Dynamically shrink font size if text overflows the fixed 36px width (Done after ApplySkin)
+    if bf.bankSpaceFs then
+        local fs = bf.bankSpaceFs
+        local font, size, flags = fs:GetFont()
+        local baseSize = size or 11
+        local currentWidth = fs:GetStringWidth()
+        if currentWidth > 36 then
+            local wantedSize = baseSize
+            while wantedSize > 6 do
+                wantedSize = wantedSize - 1
+                fs:SetFont(font, wantedSize, flags)
+                if fs:GetStringWidth() <= 36 then break end
+            end
+        end
+    end
 	
 	local SV = _G.FugaziBAGSDB or {}
 	local sortMode = SV.gphSortMode or "category"
@@ -1133,34 +774,8 @@ RefreshBankUI = function()
 	local yOff = 0
 	local listToUse = (sortMode == "category" and bf.gphCategoryDrawList) or slotList
 	
-	-- Fallback for Autodelete divider when NOT in category mode
-	if sortMode ~= "category" then
-		local destroyed = {}
-		local normal = {}
-		local destroyList = A.GetGphDestroyList and A.GetGphDestroyList() or {}
-		for _, item in ipairs(slotList) do
-			if item.itemId and destroyList[item.itemId] then
-				table.insert(destroyed, item)
-			else
-				table.insert(normal, item)
-			end
-		end
-		
-		if #destroyed > 0 then
-			local defCollapsed = (bf.bankCategoryCollapsed and bf.bankCategoryCollapsed["DELETE"] ~= false)
-			if not bf._bankInternalDrawList then bf._bankInternalDrawList = {} end
-			local draw = bf._bankInternalDrawList; wipe(draw)
-			for _, item in ipairs(normal) do table.insert(draw, item) end
-			local delDiv = A.GetRecycledBankTable()
-			delDiv.divider = "DELETE"
-			delDiv.collapsed = defCollapsed
-			table.insert(draw, delDiv)
-			if not defCollapsed then 
-				for _, item in ipairs(destroyed) do table.insert(draw, item) end 
-			end
-			listToUse = draw
-		end
-	end
+	
+
 	local bankDividerIndex = 0
 	bf.bankItemIndexToY = bf.bankItemIndexToY or {}
 	wipe(bf.bankItemIndexToY)
@@ -1168,14 +783,15 @@ RefreshBankUI = function()
 	local QUALITY_COLORS = Addon and A.QUALITY_COLORS or {}
 	if bf.gphCategoryDividerPool then for _, d in ipairs(bf.gphCategoryDividerPool) do d:Hide() end end
     local dividerClickHandler = function(self)
-        if not bf.bankCategoryCollapsed then bf.bankCategoryCollapsed = {} end
+        if not bf.gphCategoryCollapsed then bf.gphCategoryCollapsed = {} end
         local cat = self.categoryName
-        local isCollapsed = (cat == "DELETE") and (bf.bankCategoryCollapsed["DELETE"] ~= false) or bf.bankCategoryCollapsed[cat]
-        bf.bankCategoryCollapsed[cat] = not isCollapsed
+        local isCollapsed = (cat == "DELETE") and (bf.gphCategoryCollapsed["DELETE"] ~= false) or bf.gphCategoryCollapsed[cat]
+        bf.gphCategoryCollapsed[cat] = not isCollapsed
         if RefreshBankUI then RefreshBankUI() end
     end
 
     bf._gphDivIdx = 0
+    A.GPH_BANK_POOL_USED = 0
 	for idx, entry in ipairs(listToUse) do
         local newY, isDiv = A.GPH_RenderCategoryDivider(bf, content, entry, yOff, dividerClickHandler)
         if isDiv then
@@ -1183,10 +799,11 @@ RefreshBankUI = function()
         elseif entry.divider then
             -- Skip hidden headings
         else
-			local row = GetBankRow(content)
+			local row = A.GetBankItemBtn(content)
 			if firstRow == nil then firstRow = row end
 			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -yOff)
+			row:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -yOff)
+            row:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, -yOff)
 			row.entryIndex = idx
 			row._bankRowY = yOff
 			bf.bankItemIndexToY[idx] = yOff
@@ -1215,7 +832,6 @@ RefreshBankUI = function()
 			
 			
 			local rowStep = A.ComputeItemDetailsRowHeight(BANK_ROW_HEIGHT)
-			row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -yOff)
 			row:SetHeight(rowStep)
 			if row.clickArea and row.clickArea.SetHeight then row.clickArea:SetHeight(rowStep) end
  			row.bagID = bagID
@@ -1225,125 +841,34 @@ RefreshBankUI = function()
 
             if not row._scriptsBound then
                 row._scriptsBound = true
-                row.clickArea:SetScript("OnMouseDown", BankRow_clickArea_OnMouseDown)
-                row.clickArea:SetScript("OnClick", BankRow_clickArea_OnClick)
-                row.clickArea:SetScript("OnReceiveDrag", BankRow_clickArea_OnReceiveDrag)
-                row.clickArea:SetScript("OnMouseUp", BankRow_clickArea_OnMouseUp)
-                row.clickArea:SetScript("OnEnter", BankRow_clickArea_OnEnter)
-                row.clickArea:SetScript("OnLeave", BankRow_clickArea_OnLeave)
-                row.clickArea:SetScript("OnMouseWheel", BankRow_clickArea_OnMouseWheel)
+                if A.HandleBagSlotClick then row.clickArea:SetScript("OnClick", function(self, button) A.HandleBagSlotClick(self, button) end) end
+                if A.HandleBagSlotDrag then row.clickArea:SetScript("OnDragStart", function(self) A.HandleBagSlotDrag(self) end) end
+                if A.HandleBagSlotReceiveDrag then row.clickArea:SetScript("OnReceiveDrag", function(self) A.HandleBagSlotReceiveDrag(self) end) end
+                if A.HandleBagSlotEnter then row.clickArea:SetScript("OnEnter", function(self) A.HandleBagSlotEnter(self) end) end
+                if A.HandleBagSlotLeave then row.clickArea:SetScript("OnLeave", function(self) A.HandleBagSlotLeave(self) end) end
+                row.clickArea:SetScript("OnMouseWheel", function(self, delta) local bf = A.Bank; if bf and bf.scrollFrame and bf.scrollFrame.BankOnMouseWheel then bf.scrollFrame.BankOnMouseWheel(delta) end end)
             end
 
-			-- local link = info.link or (GetContainerItemLink and GetContainerItemLink(bagID, slotID)) -- info.link should be sufficient
-			if idx == 1 and BANK_DEBUG then
-				BankDebug("Step 5: first row parent=" .. tostring(row:GetParent()) .. " content=" .. tostring(content) .. " row:IsShown()=" .. tostring(row:IsShown()) .. " content:GetParent()=" .. tostring(content:GetParent()))
-			end
-			-- Removed redundant local bagID, slotID = info.bagID, info.slotID
+            -- Alias for UpdateGPHRowVisuals
+            entry.bag = bagID
+            entry.slot = slotID
 
-			-- Identity Cache Check
-			local quality = info.quality or 0
-			local name = info.name or (info.link and A.GetCachedItemInfo(info.link)) or "Empty"
-			local count = info.count or 0
-				local fSize = SV and SV.gphItemDetailsFontSize or 11
-				local fPath = SV and SV.gphItemDetailsFont or ""
-				local fAlpha = SV and SV.gphItemDetailsAlpha or 1.0
-				local fIconSize = SV and SV.gphItemDetailsIconSize or 16
-				local hideIconsBank = SV and SV.gphHideIconsInList
-				local rowFormattingEnabled = SV and SV.gphItemDetailsCustom
-
-				local state = row._visualState
-				if not state then state = {}; row._visualState = state end
-				if state.bag == bagID and state.slot == slotID and state.id == info.itemId and state.count == count and state.prot == info.isProtected and state.worn == info.previouslyWorn and state.hideIcons == hideIconsBank and state.customFormatting == rowFormattingEnabled and state.fontSize == fSize and state.fontPath == fPath and state.formattingAlpha == fAlpha and state.iconSize == fIconSize then
-					-- Skip details, but still show the row
-					row:Show()
-				else
-					state.bag = bagID; state.slot = slotID; state.id = info.itemId; state.count = count; state.prot = info.isProtected; state.worn = info.previouslyWorn; state.hideIcons = hideIconsBank; state.customFormatting = rowFormattingEnabled; state.fontSize = fSize; state.fontPath = fPath; state.formattingAlpha = fAlpha; state.iconSize = fIconSize
-				
-					if hideIconsBank then
-						row.icon:Hide()
-						if row.protectedOverlay then row.protectedOverlay:Hide() end
-						row.nameFs:ClearAllPoints()
-						row.nameFs:SetPoint("LEFT", row.clickArea, "LEFT", 4, 0)
-						row.nameFs:SetPoint("RIGHT", row.clickArea, "RIGHT", -40, 0)
-					else
-					row.icon:Show()
-					row.icon:SetSize(fIconSize, fIconSize)
-					local texture = info.texture or (GetContainerItemInfo and GetContainerItemInfo(bagID, slotID))
-					row.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-					row.nameFs:ClearAllPoints()
-					row.nameFs:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
-					row.nameFs:SetPoint("RIGHT", row.clickArea, "RIGHT", -40, 0)
-				end
-				
-				if not hideIconsBank then
-					if info.isProtected then
-						if row.icon.SetDesaturated then row.icon:SetDesaturated(false) end
-						row.icon:SetVertexColor(0.65, 0.65, 0.65)
-					else
-						if row.icon.SetDesaturated then row.icon:SetDesaturated(false) end
-						row.icon:SetVertexColor(1, 1, 1)
-					end
-				end
-
-				local rowFormattingEnabled = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemDetailsCustom
-				if row.nameFs then
-					local displayName = name or "Unknown"
-					if rowFormattingEnabled then
-						local fontPath, fontSize = A.GetCategoryHeaderFontAndSize()
-						local path = (SV and SV.gphItemDetailsFont and SV.gphItemDetailsFont ~= "") and SV.gphItemDetailsFont or fontPath or "Fonts\\FRIZQT__.TTF"
-						fSize = (SV and SV.gphItemDetailsFontSize and SV.gphItemDetailsFontSize >= 8) and SV.gphItemDetailsFontSize or 11
-						row.nameFs:SetFont(path, fSize, "")
-						
-						local qInfo = (A.QUALITY_COLORS and A.QUALITY_COLORS[quality]) or { r = 1, g = 1, b = 1 }
-						local rC, gC, bC = qInfo.r or 1, qInfo.g or 1, qInfo.b or 1
-						if info.isProtected and name ~= "Hearthstone" then
-							local mix, grey = 0.28, 0.48
-							rC = rC * mix + grey * (1 - mix)
-							gC = gC * mix + grey * (1 - mix)
-							bC = bC * mix + grey * (1 - mix)
-						end
-						local hex = string.format("%02x%02x%02x", math.floor(rC * 255), math.floor(gC * 255), math.floor(bC * 255))
-						A.SafeSetText(row.nameFs, "|cff" .. hex .. displayName .. "|r")
-						row.nameFs:SetTextColor(1, 1, 1, fAlpha or 1)
-					else
-						row.nameFs:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
-						local qInfo = QUALITY_COLORS[quality] or { r = 0.8, g = 0.8, b = 0.8, hex = "cccccc" }
-						local nameHex = A.GetItemNameHex(quality, info.isProtected, qInfo)
-						A.SafeSetText(row.nameFs, "|cff" .. (nameHex or "cccccc") .. displayName .. "|r")
-					end
-				end
-
-				if (info.isProtected or info.previouslyWorn) and not rowFormattingEnabled then
-					if row.protectedOverlay then row.protectedOverlay:Show() end
-				else
-					if row.protectedOverlay then row.protectedOverlay:Hide() end
-				end
-				
-				A.SafeSetText(row.countFs, (count and count > 1) and ("|cffaaaaaa x" .. tostring(count) .. "|r") or "")
-				row.totalCount = count
-				
-				if row.clickArea and bagID ~= nil and slotID ~= nil and _G.FugaziBAGS_EnsureSecureRowBtn then
-					_G.FugaziBAGS_EnsureSecureRowBtn(row.clickArea, bagID, slotID)
-				end
-				-- Handled outside cache block below
-
-			end -- END VISUAL CACHE BLOCK
-				-- [CONSOLIDATED] ApplyItemDetailsToRow call removed.
-				-- A.ApplyItemDetailsToRow(row, name, quality, info.isProtected, info.itemId)
-
-				row.cachedItem = info
-				if row.cooldownOverlay then
-					local map = bf._gphIdToSlotMap
-					if A.FugaziBAGS_CheckRowCooldown and A.FugaziBAGS_CheckRowCooldown(row, info, map) then
-						row:SetScript("OnUpdate", FugaziBankRow_OnUpdateCooldown)
-					else
-						row:SetScript("OnUpdate", nil)
-					end
-				end
+            local rowOk, rowErr = pcall(A.UpdateGPHRowVisuals, row, entry, A.GPH_BANK_POOL_USED, yOff, false, nil, bf, bf._gphIdToSlotMap, true)
+            if not rowOk then A.AddonPrint("[Fugazi] Bank GPH row error: " .. tostring(rowErr)) end
 
             yOff = yOff + rowStep
 		end
 	end
+
+    for i = A.GPH_BANK_POOL_USED + 1, #(A.GPH_BANK_POOL or {}) do
+        if A.GPH_BANK_POOL[i] then A.GPH_BANK_POOL[i]:Hide() end
+    end
+
+    if bf.gphCategoryDividerPool then
+        for i = bf._gphDivIdx + 1, #bf.gphCategoryDividerPool do
+            if bf.gphCategoryDividerPool[i] then bf.gphCategoryDividerPool[i]:Hide() end
+        end
+    end
 
 	content:SetHeight(math.max(yOff, 1))
 	
@@ -1513,7 +1038,7 @@ RefreshBankUI = function()
 		end
 	end
 
-    if CleanupBankRowPool then CleanupBankRowPool() end
+    -- CleanupBankRowPool removed
 
     -- Tooltip Sync: Ensure tooltips don't stay hidden or stale after a refresh.
     local focus = (GetMouseFocus and GetMouseFocus())
@@ -1586,12 +1111,19 @@ function A.NegotiateSizes(self)
         iH = inv.gphGridFrameH or inv:GetHeight()
     elseif cg and cg.ComputeFrameSize then
         iW, iH = cg.ComputeFrameSize(false)
-        -- Ensure minimum height for list mode (default 520)
-        local minH = (DB.gphMinHeight or inv.EXPANDED_HEIGHT or 520)
-        iH = math.max(iH or 0, minH)
+        if DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0 then
+            iH = DB.gphListViewHeight
+        else
+            -- Ensure minimum height for list mode (default 520)
+            local minH = (DB.gphMinHeight or inv.EXPANDED_HEIGHT or 420)
+            iH = math.max(iH or 0, minH)
+        end
+        if DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0 then
+            iW = DB.gphListViewWidth
+        end
     else
-        iW = 340
-        iH = inv.EXPANDED_HEIGHT or 520
+        iW = (DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0) and DB.gphListViewWidth or 340
+        iH = (DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0) and DB.gphListViewHeight or (inv.EXPANDED_HEIGHT or 420)
     end
     
     -- Fallback to last saved height
@@ -1609,9 +1141,15 @@ function A.NegotiateSizes(self)
             bH = bank.gphGridFrameH or bank:GetHeight()
         elseif cg and cg.ComputeFrameSize then
             bW, bH = cg.ComputeFrameSize(true)
+            if DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0 then
+                bH = DB.gphListViewHeight
+            end
+            if DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0 then
+                bW = DB.gphListViewWidth
+            end
         else
-            bW = 340
-            bH = 520
+            bW = (DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0) and DB.gphListViewWidth or 340
+            bH = (DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0) and DB.gphListViewHeight or 420
         end
         finalW = math.max(bW or 0, iW or 0)
         finalH = math.max(bH or 0, iH or 0)
@@ -1788,27 +1326,41 @@ local function doShowFugaziBank()
                 inv.gphInventoryContainer:Show()
             end
             if _G.RefreshGPHUI then _G.RefreshGPHUI() end
-            do
-                local p, r, rp, x, y = inv:GetPoint(1)
-                if p and rp and x and y then
-                    inv._gphPreBankAnchor = { p, r, rp, x, y }
-                    if not (p == "TOPLEFT" and rp == "TOP" and x == 2 and y == -80) then
-                        if A.SaveFrameLayout then
-                            A.SaveFrameLayout(inv, nil, "gphPreBankPoint")
-                            A.SaveFrameLayout(inv, "gphShown", "gphPoint")
+            local freeFloat = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphBankFreeFloat
+            if not freeFloat then
+                do
+                    local p, r, rp, x, y = inv:GetPoint(1)
+                    if p and rp and x and y then
+                        inv._gphPreBankAnchor = { p, r, rp, x, y }
+                        if not (p == "TOPLEFT" and rp == "TOP" and x == 2 and y == -80) then
+                            if A.SaveFrameLayout then
+                                A.SaveFrameLayout(inv, nil, "gphPreBankPoint")
+                                A.SaveFrameLayout(inv, "gphShown", "gphPoint")
+                            end
                         end
                     end
                 end
+                inv:ClearAllPoints()
+                inv:SetPoint("TOPLEFT", UIParent, "TOP", 2, -80)
             end
-            inv:ClearAllPoints()
-            inv:SetPoint("TOPLEFT", UIParent, "TOP", 2, -80)
         else
             bf:SetParent(UIParent)
             bf:SetScale(1)
         end
+        
         bf:ClearAllPoints()
-        if inv then bf:SetPoint("TOPRIGHT", inv, "TOPLEFT", -4, 0)
-        else bf:SetPoint("TOP", UIParent, "CENTER", 200, -100) end
+        local freeFloat = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphBankFreeFloat
+        if freeFloat and _G.FugaziBAGSDB.framePoint then
+            if A.RestoreFrameLayout then
+                A.RestoreFrameLayout(bf, "frameShown", "framePoint")
+            end
+        else
+            if inv and not freeFloat then
+                bf:SetPoint("TOPRIGHT", inv, "TOPLEFT", -4, 0)
+            else
+                bf:SetPoint("TOP", UIParent, "CENTER", 200, -100)
+            end
+        end
         A.Bank:Show()
         
         if _G.__FugaziBAGS_Skins and _G.__FugaziBAGS_Skins.ApplyBankFrameSkin then
@@ -1829,7 +1381,7 @@ local function doShowFugaziBank()
         
         local cg = _G.FugaziBAGS_CombatGrid
         if cg then
-            local wantBankGrid = GetPerChar and A.GetPerChar("gphBankGridMode", false)
+            local wantBankGrid = GetPerChar and A.GetPerChar("gphBankGridMode", true)
             bf.gphGridMode = wantBankGrid
             if wantBankGrid then
                 if cg.ShowInBankFrame then cg.ShowInBankFrame(bf) end
@@ -1878,7 +1430,13 @@ bankEventFrame:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
 bankEventFrame:RegisterEvent("BAG_UPDATE")
 
 bankEventFrame:SetScript("OnEvent", function(self, event, ...)
+    local arg1 = ...
     if event == "BAG_UPDATE" then
+        if A.WipeBagLinkCache then A.WipeBagLinkCache(arg1) end
+    elseif event == "PLAYERBANKSLOTS_CHANGED" then
+        if A.WipeBagLinkCache then A.WipeBagLinkCache(-1) end
+    end
+    if event == "BAG_UPDATE" or event == "PLAYERBANKSLOTS_CHANGED" then
         if A.Bank and A.Bank:IsShown() and RefreshBankUI then
             if not A.bankUpdateDeferFrame then A.bankUpdateDeferFrame = CreateFrame("Frame") end
             local bdef = A.bankUpdateDeferFrame
@@ -1941,15 +1499,18 @@ bankEventFrame:SetScript("OnEvent", function(self, event, ...)
         end
         local inv = A.Inventory
         if inv then
-            if inv._gphPreBankAnchor then
-                local p, r, rp, x, y = unpack(inv._gphPreBankAnchor)
-                if p and rp and x and y then
-                    inv:ClearAllPoints()
-                    inv:SetPoint(p, r or UIParent, rp, x, y)
+            local freeFloat = _G.FugaziBAGSDB and _G.FugaziBAGSDB.gphBankFreeFloat
+            if not freeFloat then
+                if inv._gphPreBankAnchor then
+                    local p, r, rp, x, y = unpack(inv._gphPreBankAnchor)
+                    if p and rp and x and y then
+                        inv:ClearAllPoints()
+                        inv:SetPoint(p, r or UIParent, rp, x, y)
+                    end
+                    inv._gphPreBankAnchor = nil
+                elseif not inv._gphRestoredFromBankOnHide and A.RestoreFrameLayout then
+                    A.RestoreFrameLayout(inv, nil, "gphPreBankPoint")
                 end
-                inv._gphPreBankAnchor = nil
-            elseif not inv._gphRestoredFromBankOnHide and A.RestoreFrameLayout then
-                A.RestoreFrameLayout(inv, nil, "gphPreBankPoint")
             end
             inv._gphRestoredFromBankOnHide = nil
         end
@@ -1963,7 +1524,7 @@ end)
 
 
 --- Next item of given quality in bank.
-local function FindNextFromBank(rarity)
+local function FindNextFromBank(rarity, categoryName)
     local function qualityMatches(r, q)
         if q == r then return true end
         if r == 4 and q >= 4 then return true end
@@ -1976,11 +1537,27 @@ local function FindNextFromBank(rarity)
         for slot = 1, numSlots do
             local _, _, locked = GetContainerItemInfo(bagID, slot)
             local itemId = GetContainerItemID and GetContainerItemID(bagID, slot)
-            if itemId and not locked then
-                local _, _, q = A.GetCachedItemInfo(itemId)
+            local link = GetContainerItemLink and GetContainerItemLink(bagID, slot)
+            if itemId and link and not locked then
+                local _, _, q = A.GetCachedItemInfo(link)
                 q = q or 0
-                if qualityMatches(rarity, q) and not A.RarityIsProtected(itemId, q) then
-                    return bagID, slot
+                if not A.RarityIsProtected(itemId, q) then
+                    if categoryName then
+                        local itemCat = "Other"
+                        local typeCache = (_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemTypeCache) or {}
+                        if itemId == A.HEARTHSTONE_ID then itemCat = "HIDDEN_FIRST"
+                        elseif A.IsQuestItem and A.IsQuestItem(link) then itemCat = "Quest"
+                        elseif q == 0 then itemCat = "Miscellaneous"
+                        elseif typeCache[itemId] then itemCat = typeCache[itemId]
+                        else
+                            local name, _, quality, _, _, giType, giSubType = A.GetCachedItemInfo(link)
+                            if giSubType == "Reagent" then itemCat = "Trade Goods"
+                            else itemCat = (giType and giType ~= "" and giType) or "Other" end
+                        end
+                        if itemCat == categoryName then return bagID, slot end
+                    elseif qualityMatches(rarity, q) then
+                        return bagID, slot
+                    end
                 end
             end
         end
@@ -2019,9 +1596,11 @@ local function FindNextFromBags(rarity, categoryName)
         if not locked and not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(e.itemId, e.quality)) then
             if categoryName then
                 local itemCat = "Other"
+                local typeCache = (_G.FugaziBAGSDB and _G.FugaziBAGSDB.gphItemTypeCache) or {}
                 if e.itemId == A.HEARTHSTONE_ID then itemCat = "HIDDEN_FIRST"
                 elseif A.IsQuestItem and A.IsQuestItem(e.link) then itemCat = "Quest"
                 elseif e.quality == 0 then itemCat = "Miscellaneous"
+                elseif typeCache[e.itemId] then itemCat = typeCache[e.itemId]
                 else
                     local name, _, quality, _, _, giType, giSubType = A.GetCachedItemInfo(e.link)
                     if giSubType == "Reagent" then itemCat = "Trade Goods"
@@ -2103,7 +1682,7 @@ rarityMoveWorker:SetScript("OnUpdate", function(self, elapsed)
     if job.mode == "bags_to_bank" then
         srcBag, srcSlot = FindNextFromBags(job.rarity, job.category)
     else
-        srcBag, srcSlot = A.FindNextFromBank(job.rarity)
+        srcBag, srcSlot = A.FindNextFromBank(job.rarity, job.category)
     end
     if not srcBag or not srcSlot then
         self._emptyTicks = (self._emptyTicks or 0) + 1
@@ -2169,6 +1748,14 @@ function A.GetModularRarityTooltip(rarity, tt)
     if origGetModularRarityTooltip then 
         origGetModularRarityTooltip(rarity, tt) 
     end
+
+    -- Add Bank-specific action if bank is open
+    local f = A.Bank
+    if f and f:IsShown() then
+        tt:AddLine("Shift+RMB: Send Rarity to Bank", 0.6, 0.6, 0.6)
+    end
+end
+    
 
     -- Add Bank-specific action if bank is open
     local f = A.Bank

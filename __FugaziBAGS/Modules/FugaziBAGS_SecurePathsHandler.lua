@@ -121,9 +121,7 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
     modOverlay._clickArea = clickArea
     modOverlay:SetScript("OnMouseWheel", forwardMouseWheel)
     
-    modOverlay:SetScript("OnMouseDown", function(self, mouseButton)
-        if Addon and A.TriggerRowPulse then A.TriggerRowPulse(clickArea:GetParent()) end
-    end)
+
     modOverlay:SetScript("OnEnter", function(self)
         local ca = self._clickArea
         if ca then A.HandleBagSlotEnter(ca) end
@@ -220,9 +218,8 @@ function A.ToggleGPHFrame()
             gphFrame.gphSelectedRowBtn = nil
             gphFrame.gphSelectedItemLink = nil
             gphFrame.gphScrollToDefaultOnNextRefresh = true
-            container:Show()
             if gphFrame then gphFrame._refreshImmediate = true end
-            if A.RefreshGPHUI then A.RefreshGPHUI() end
+            container:Show()
             if gphFrame and gphFrame.RefreshBagLayout and not gphFrame.gphGridMode then gphFrame:RefreshBagLayout() end
             if gphFrame:IsShown() then A.SaveFrameLayout(gphFrame, "gphShown", "gphPoint") end
         end
@@ -252,9 +249,8 @@ function A.ToggleGPHFrame()
             gphFrame.gphSelectedIndex = nil
             gphFrame.gphSelectedRowBtn = nil
             gphFrame.gphSelectedItemLink = nil
+            if gphFrame then gphFrame._refreshImmediate = true end
             gphFrame:Show()
-            if gphFrame then gphFrame._refreshImmediate = true end 
-            if A.RefreshGPHUI then A.RefreshGPHUI() end
             A.SaveFrameLayout(gphFrame, "gphShown", "gphPoint")
         end
     end

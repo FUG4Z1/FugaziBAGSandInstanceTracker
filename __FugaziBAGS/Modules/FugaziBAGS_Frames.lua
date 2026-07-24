@@ -69,8 +69,8 @@ end
 function A.RefreshBagLayout(f)
     if not f or not f.scrollFrame then return end
     if not f.gphGridMode then
-        local wantW = f.gphGridFrameW or f:GetWidth() or 340
-        local wantH = f.gphGridFrameH or f.EXPANDED_HEIGHT or 520
+        local wantW = f.gphGridFrameW or 340
+        local wantH = f.gphGridFrameH or f.EXPANDED_HEIGHT or 420
         f.gphForceHeight = wantH
         f.gphForceHeightFrames = 8
         local p = f:GetParent()
@@ -127,12 +127,18 @@ function A.NegotiateSizes(f)
         iH = f.gphGridFrameH or f:GetHeight()
     elseif cg and cg.ComputeFrameSize then
         iW, iH = cg.ComputeFrameSize(false)
-        -- Ensure listview doesn't shrink below a reasonable minimum (default 520)
-        local minH = (DB.gphMinHeight or f.EXPANDED_HEIGHT or 520)
-        iH = math.max(iH or 0, minH)
+        if DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0 then
+            iH = DB.gphListViewHeight
+        else
+            local minH = (DB.gphMinHeight or f.EXPANDED_HEIGHT or 420)
+            iH = math.max(iH or 0, minH)
+        end
+        if DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0 then
+            iW = DB.gphListViewWidth
+        end
     else
-        iW = 340
-        iH = f.EXPANDED_HEIGHT or 520
+        iW = (DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0) and DB.gphListViewWidth or 340
+        iH = (DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0) and DB.gphListViewHeight or (f.EXPANDED_HEIGHT or 420)
     end
     
     -- Fallback to last saved height if current is somehow still zero or extremely small
@@ -150,9 +156,15 @@ function A.NegotiateSizes(f)
             bH = bank.gphGridFrameH or bank:GetHeight()
         elseif cg and cg.ComputeFrameSize then
             bW, bH = cg.ComputeFrameSize(true)
+            if DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0 then
+                bH = DB.gphListViewHeight
+            end
+            if DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0 then
+                bW = DB.gphListViewWidth
+            end
         else
-            bW = 340
-            bH = 520
+            bW = (DB.gphListViewWidthAuto == false and DB.gphListViewWidth and DB.gphListViewWidth > 0) and DB.gphListViewWidth or 340
+            bH = (DB.gphListViewHeightAuto == false and DB.gphListViewHeight and DB.gphListViewHeight > 0) and DB.gphListViewHeight or 420
         end
         local _math_max = _G.math and _G.math.max or math.max
         finalW = _math_max(bW or 0, iW or 0)
@@ -268,7 +280,9 @@ function A.CreateGPHFrame()
     f._isBankFrame = false
     local cg = _G.FugaziBAGS_CombatGrid
     local initW, initH = 340, 520
-    if cg and cg.ComputeFrameSize then
+    if DB and DB.gphPoint and DB.gphPoint.w and DB.gphPoint.h then
+        initW, initH = DB.gphPoint.w, DB.gphPoint.h
+    elseif cg and cg.ComputeFrameSize then
         initW, initH = cg.ComputeFrameSize()
     end
     f:SetWidth(initW)
@@ -286,7 +300,7 @@ function A.CreateGPHFrame()
     f:SetScript("OnDragStart", function(self) A.GPHOnDragStart(self) end)
     f:SetScript("OnDragStop", function(self) A.GPHOnDragStop(self) end)
     f:SetScript("OnHide", function()
-        if f.gphDestroyBtn then f.gphDestroyBtn:Hide() end
+        if not InCombatLockdown() and f.gphDestroyBtn then f.gphDestroyBtn:Hide() end
         if f.gphProxyFrame then f.gphProxyFrame:Hide() end
         A.SaveFrameLayout(f, "gphShown", "gphPoint")
         if not f.gphGridMode and f.gphScrollBar then
@@ -297,7 +311,7 @@ function A.CreateGPHFrame()
     end)
     f._gphSkinAppliedOnFirstShow = nil  
     f:SetScript("OnShow", function()
-        if f.gphDestroyBtn then f.gphDestroyBtn:SetScale(f:GetScale()) end
+        if not InCombatLockdown() and f.gphDestroyBtn then f.gphDestroyBtn:SetScale(f:GetScale()) end
         if not InCombatLockdown() and f.gphProxyFrame then f.gphProxyFrame:Show() end
         if not f._gphSkinAppliedOnFirstShow and f.ApplySkin then
             f._gphSkinAppliedOnFirstShow = true
@@ -310,23 +324,10 @@ function A.CreateGPHFrame()
         f.gphScrollToDefaultOnNextRefresh = true
         f._gphHomebaseRetryScheduled = nil
         if RefreshGPHUI then RefreshGPHUI() end
-        local df = A._gphSelectionDeferFrame
-        if df then
-            df:Show()
-            df:SetScript("OnUpdate", function(self)
-                self:SetScript("OnUpdate", nil)
-                self:Hide()
-                if f then
-                    f.gphScrollToDefaultOnNextRefresh = true
-                    f._refreshImmediate = true
-                end
-                if RefreshGPHUI then RefreshGPHUI() end
-            end)
-        end
     end)
     f:SetFrameStrata("DIALOG")
     f:SetFrameLevel(10)
-    f.EXPANDED_HEIGHT = 520
+    f.EXPANDED_HEIGHT = 420
 
     local gphEscCatcher = CreateFrame("EditBox", nil, f)
     gphEscCatcher:SetAutoFocus(false)
@@ -427,7 +428,7 @@ function A.CreateGPHFrame()
     container:SetPoint("BOTTOMLEFT", keybindOwner, "BOTTOMLEFT", -10000, -10000)
     container:Hide()
     container:SetScript("OnShow", function()
-        local wantGrid = A.GetPerChar("gphGridMode", false)
+        local wantGrid = A.GetPerChar("gphGridMode", true)
         local cg = _G.FugaziBAGS_CombatGrid
         if not InCombatLockdown() then f:Show() end
         f.gphGridMode = wantGrid
@@ -491,7 +492,7 @@ function A.CreateGPHFrame()
     f.UpdateGPHButtonVisibility = function(self) A.UpdateGPHButtonVisibility(self) end
     if DB.gphDestroyPreferProspect == nil then DB.gphDestroyPreferProspect = false end
 
-    local destroyBtn = CreateFrame("Button", "FugaziBAGS_DestroyBtn", UIParent, "SecureActionButtonTemplate")
+    local destroyBtn = CreateFrame("Button", "FugaziBAGS_DestroyBtn", f, "SecureActionButtonTemplate")
     destroyBtn:SetSize(22, 22) 
     destroyBtn:SetPoint("LEFT", titleBar, "LEFT", 0, 0)
     destroyBtn:SetFrameStrata("DIALOG")
@@ -509,13 +510,22 @@ function A.CreateGPHFrame()
     destroyIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) 
     destroyIcon:SetAlpha(1.0)
     destroyBtn.icon = destroyIcon
+    
+
 
     local lastClickTime = 0
     destroyBtn:SetScript("PreClick", function(self, button, down)
+
         if InCombatLockdown and InCombatLockdown() then
             return
         end
         if button ~= "LeftButton" then
+            self:SetAttribute("macrotext1", "")
+            return
+        end
+        
+        if A.isDisenchanting then
+
             self:SetAttribute("macrotext1", "")
             return
         end
@@ -563,8 +573,27 @@ function A.CreateGPHFrame()
         A.lockedDisenchantSlots[bag .. "_" .. slot] = now
         A.activeDisenchantSlot = { bag = bag, slot = slot, itemId = itemId, time = now }
         self:SetAttribute("macrotext1", ("/cast %s;\n/use %d %d"):format(spellName, bag, slot))
+        
+        -- INSTANT UI DIMMING: Hide the item from the cache and dim the UI row immediately!
+
+        if A.Inventory and A.Inventory.scrollFrame then
+            local content = A.Inventory.scrollFrame:GetScrollChild()
+            if content then
+                for i = 1, content:GetNumChildren() do
+                    local child = select(i, content:GetChildren())
+                    local rowItemId = child.itemId or (child.itemLink and tonumber(child.itemLink:match("item:(%d+)")))
+                    if rowItemId == itemId then
+                        child:SetAlpha(0.3)
+                        break
+                    end
+                end
+            end
+        end
+        
+
     end)
     destroyBtn:SetScript("OnEnter", function()
+
         if f.gphBtnHover then
             destroyBtn.bg:SetTexture(unpack(f.gphBtnHover))
         else
@@ -605,8 +634,10 @@ function A.CreateGPHFrame()
         destroyIcon:SetAlpha(0.8)
         GameTooltip:Hide()
     end)
-    destroyBtn:SetScript("PostClick", function()
-        if A.PlayClickSound then A.PlayClickSound() end
+    destroyBtn:SetScript("PostClick", function(self)
+        if self:GetAttribute("macrotext1") and self:GetAttribute("macrotext1") ~= "" then
+            if A.PlayClickSound then A.PlayClickSound() end
+        end
     end)
     f.gphDestroyBtn = destroyBtn
     f.UpdateDestroyButtonAppearance = function(self) A.UpdateDestroyButtonAppearance(self) end
@@ -892,6 +923,13 @@ function A.CreateGPHFrame()
         if GetCursorInfo and GetCursorInfo() == "item" then placeCursorInFirstFreeSlot() end
     end)
     f.gphBagSpaceBtn = gphBagSpaceBtn
+    f.ToggleKeyringFrame = function(self)
+        self._keyringForcedShown = not self._keyringForcedShown
+        if A.RefreshGPHUI then A.RefreshGPHUI() end
+        if self.gphGridMode and self.LayoutGrid then
+            self:LayoutGrid()
+        end
+    end
 
     local gphBottomBar = CreateFrame("Frame", nil, f)
     gphBottomBar:SetHeight(20)
@@ -1063,7 +1101,7 @@ function A.CreateGPHFrame()
             local bagID = btn.bagID
             if bagID == -2 then
                 -- Keyring
-                btn.icon:SetTexture("Interface\\ContainerFrame\\KeyRing-AbilityIcon")
+                btn.icon:SetTexture("Interface\\ContainerFrame\\KeyRing-Bag-Icon")
                 btn.icon:Show()
             else
                 local texture = (bagID == 0) and "Interface\\Buttons\\Button-Backpack-Up" or (GetInventoryItemTexture and GetInventoryItemTexture("player", ContainerIDToInventoryID(bagID)))
@@ -1150,7 +1188,7 @@ function A.UpdateGPHProfessionButtons(f)
     if not f then return end
     local titleBar = f.gphTitleBar
     if not titleBar then return end
-    local hideDestroy = A.GetPerChar("gphHideDestroyBtn", false)
+
     local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
     local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
     local isAtMail = (_G.MailFrame and _G.MailFrame:IsShown())
@@ -1159,7 +1197,7 @@ function A.UpdateGPHProfessionButtons(f)
     local lastBtn = nil
     local anchorToLeft = true
     if f.gphDestroyBtn then
-        if not hideDestroy and canDestroy then
+        if canDestroy then
             f.gphDestroyBtn:ClearAllPoints()
             f.gphDestroyBtn:SetPoint("LEFT", titleBar, "LEFT", 4, 0)
             f.gphDestroyBtn:Show()

@@ -18,6 +18,18 @@ function A.ResetGPHPools()
     GPH_QUAL_POOL_USED = 0
 end
 
+function A.ResetGPHQualityPool()
+    GPH_QUAL_POOL_USED = 0
+end
+
+function A.ResetGPHTextPool()
+    GPH_TEXT_POOL_USED = 0
+end
+
+function A.ResetGPHItemPool()
+    GPH_ITEM_POOL_USED = 0
+end
+
 function A.CleanupGPHPools()
     if not GPH_ROW_POOL then return end
     A._gphIsCleaning = true -- START GUARD
@@ -36,6 +48,18 @@ function A.CleanupGPHPools()
     A._gphIsCleaning = false -- END GUARD
 end
 
+function A.GetGPHItemPool()
+    return GPH_ITEM_POOL, GPH_ITEM_POOL_USED
+end
+
+function A.GetGPHTextPool()
+    return GPH_TEXT_POOL, GPH_TEXT_POOL_USED
+end
+
+function A.SetGPHItemPoolUsed(count)
+    GPH_ITEM_POOL_USED = count or 0
+end
+
 --- Get or create a recycled GPH text element (font string).
 function A.GetGPHText(parent)
     GPH_TEXT_POOL_USED = GPH_TEXT_POOL_USED + 1
@@ -52,104 +76,104 @@ function A.GetGPHText(parent)
 end
 
 --- Get or create a recycled structural GPH item button (icon, name, count).
-function A.GetGPHItemBtn(parent)
-    GPH_ITEM_POOL_USED = GPH_ITEM_POOL_USED + 1
-    local btn = GPH_ITEM_POOL[GPH_ITEM_POOL_USED]
-    if not btn then
-        btn = CreateFrame("Frame", "InvRow_" .. GPH_ITEM_POOL_USED, parent)
-        GPH_ITEM_POOL[GPH_ITEM_POOL_USED] = btn
-        btn:SetWidth(SCROLL_CONTENT_WIDTH)
-        btn:SetHeight(18)
-        btn:EnableMouse(true)
-        
-        btn.deleteBtn = nil
+function A.CreateItemBtnStruct(parent, name)
+    local btn = CreateFrame("Frame", name, parent)
+    btn:SetHeight(18)
+    btn:EnableMouse(true)
+    
+    btn.deleteBtn = nil
 
-        local clickArea = CreateFrame("Button", nil, btn)
-        clickArea:SetPoint("LEFT", btn, "LEFT", 0, 0)
-        clickArea:SetPoint("RIGHT", btn, "RIGHT", 0, 0)
-        clickArea:SetHeight(18)
-        clickArea:EnableMouse(true)
-        clickArea:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        clickArea:SetFrameLevel(btn:GetFrameLevel() + 2)
-        btn.clickArea = clickArea
+    local clickArea = CreateFrame("Button", nil, btn)
+    clickArea:SetPoint("LEFT", btn, "LEFT", 0, 0)
+    clickArea:SetPoint("RIGHT", btn, "RIGHT", 0, 0)
+    clickArea:SetHeight(18)
+    clickArea:EnableMouse(true)
+    clickArea:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    clickArea:SetFrameLevel(btn:GetFrameLevel() + 2)
+    btn.clickArea = clickArea
 
-        local sel = clickArea:CreateTexture(nil, "BACKGROUND")
-        sel:SetAllPoints()
-        sel:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        sel:SetVertexColor(0.1, 0.3, 0.15, 0.7)
-        sel:Hide()
-        btn.selectedTex = sel
+    local sel = clickArea:CreateTexture(nil, "BACKGROUND")
+    sel:SetPoint("TOPLEFT", clickArea, "TOPLEFT", 0, 0)
+    sel:SetPoint("BOTTOMRIGHT", clickArea, "BOTTOMRIGHT", 0, 1)
+    sel:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    sel:SetVertexColor(0.1, 0.3, 0.15, 0.7)
+    sel:Hide()
+    btn.selectedTex = sel
 
-        local icon = clickArea:CreateTexture(nil, "ARTWORK")
-        icon:SetWidth(16)
-        icon:SetHeight(16)
-        icon:SetPoint("LEFT", clickArea, "LEFT", 0, 0)
-        btn.icon = icon
-        local countFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        countFs:SetPoint("RIGHT", clickArea, "RIGHT", -2, 0)
-        countFs:SetJustifyH("RIGHT")
-        btn.countFs = countFs
-        local nameFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        nameFs:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-        nameFs:SetPoint("RIGHT", clickArea, "RIGHT", -40, 0)
-        nameFs:SetJustifyH("LEFT")
-        btn.nameFs = nameFs
-        local rowHighlight = clickArea:CreateTexture(nil, "BACKGROUND")
-        rowHighlight:SetAllPoints()
-        rowHighlight:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        rowHighlight:SetVertexColor(1, 1, 1, 0.06)
-        rowHighlight:Hide()
-        btn.rowHighlight = rowHighlight
-        
-        local cooldownOverlay = clickArea:CreateTexture(nil, "OVERLAY")
-        cooldownOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        cooldownOverlay:SetPoint("TOPLEFT", clickArea, "TOPLEFT", 0, 0)
-        cooldownOverlay:SetPoint("BOTTOMLEFT", clickArea, "BOTTOMLEFT", 0, 0)
-        cooldownOverlay:SetWidth(0.01)
-        cooldownOverlay:Hide()
-        btn.cooldownOverlay = cooldownOverlay
-        
-        local destroyOverlay = clickArea:CreateTexture(nil, "OVERLAY")
-        destroyOverlay:SetAllPoints()
-        destroyOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        destroyOverlay:SetVertexColor(0.5, 0.05, 0.05)
-        destroyOverlay:SetAlpha(0.85)
-        destroyOverlay:Hide()
-        btn.destroyOverlay = destroyOverlay
-        
-        local protectedOverlay = clickArea:CreateTexture(nil, "OVERLAY")
-        protectedOverlay:SetAllPoints()
-        protectedOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        protectedOverlay:SetVertexColor(0, 0, 0)
-        protectedOverlay:SetAlpha(0.38)
-        protectedOverlay:Hide()
-        btn.protectedOverlay = protectedOverlay
-        
-        local protectedKeyIcon = clickArea:CreateTexture(nil, "OVERLAY")
-        protectedKeyIcon:SetSize(14, 14)
-        protectedKeyIcon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-        protectedKeyIcon:SetTexture("Interface\\Icons\\INV_Misc_Key_13")
-        protectedKeyIcon:Hide()
-        btn.protectedKeyIcon = protectedKeyIcon
-        
-        local prevWornIcon = clickArea:CreateTexture(nil, "OVERLAY")
-        prevWornIcon:SetWidth(14)
-        prevWornIcon:SetHeight(14)
-        prevWornIcon:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-        prevWornIcon:Hide()
-        btn.prevWornIcon = prevWornIcon
+    local icon = clickArea:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(16)
+    icon:SetHeight(16)
+    icon:SetPoint("LEFT", clickArea, "LEFT", 0, 0)
+    btn.icon = icon
+    local countFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    countFs:SetPoint("RIGHT", clickArea, "RIGHT", -2, 0)
+    countFs:SetJustifyH("RIGHT")
+    btn.countFs = countFs
+    local nameFs = clickArea:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    nameFs:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+    nameFs:SetPoint("RIGHT", clickArea, "RIGHT", -40, 0)
+    nameFs:SetJustifyH("LEFT")
+    btn.nameFs = nameFs
+    local rowHighlight = clickArea:CreateTexture(nil, "BACKGROUND")
+    rowHighlight:SetPoint("TOPLEFT", clickArea, "TOPLEFT", 0, 0)
+    rowHighlight:SetPoint("BOTTOMRIGHT", clickArea, "BOTTOMRIGHT", 0, 1)
+    rowHighlight:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    rowHighlight:SetVertexColor(1, 1, 1, 0.06)
+    rowHighlight:Hide()
+    btn.rowHighlight = rowHighlight
+    
+    local cooldownOverlay = clickArea:CreateTexture(nil, "OVERLAY")
+    cooldownOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    cooldownOverlay:SetPoint("TOPLEFT", clickArea, "TOPLEFT", 0, 0)
+    cooldownOverlay:SetPoint("BOTTOMLEFT", clickArea, "BOTTOMLEFT", 0, 0)
+    cooldownOverlay:SetWidth(0.01)
+    cooldownOverlay:Hide()
+    btn.cooldownOverlay = cooldownOverlay
+    
+    local destroyOverlay = clickArea:CreateTexture(nil, "OVERLAY")
+    destroyOverlay:SetAllPoints()
+    destroyOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    destroyOverlay:SetVertexColor(0.5, 0.05, 0.05)
+    destroyOverlay:SetAlpha(0.85)
+    destroyOverlay:Hide()
+    btn.destroyOverlay = destroyOverlay
+    
+    local protectedOverlay = clickArea:CreateTexture(nil, "OVERLAY")
+    protectedOverlay:SetAllPoints()
+    protectedOverlay:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    protectedOverlay:SetVertexColor(0, 0, 0)
+    protectedOverlay:SetAlpha(0.38)
+    protectedOverlay:Hide()
+    btn.protectedOverlay = protectedOverlay
+    
+    local protectedKeyIcon = clickArea:CreateTexture(nil, "OVERLAY")
+    protectedKeyIcon:SetSize(14, 14)
+    protectedKeyIcon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+    protectedKeyIcon:SetTexture("Interface\\Icons\\INV_Misc_Key_13")
+    protectedKeyIcon:Hide()
+    btn.protectedKeyIcon = protectedKeyIcon
+    
+    local prevWornIcon = clickArea:CreateTexture(nil, "OVERLAY")
+    prevWornIcon:SetWidth(14)
+    prevWornIcon:SetHeight(14)
+    prevWornIcon:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+    prevWornIcon:Hide()
+    btn.prevWornIcon = prevWornIcon
 
-        local pulse = CreateFrame("Frame", nil, clickArea)
-        pulse:SetAllPoints()
-        pulse:SetFrameLevel(clickArea:GetFrameLevel() + 5)
-        local pulseTex = pulse:CreateTexture(nil, "OVERLAY")
-        pulseTex:SetAllPoints()
-        pulseTex:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-        pulseTex:SetVertexColor(1, 1, 1, 0.7)
-        pulse:Hide()
-        btn.pulseTex = pulse
+    local pulse = CreateFrame("Frame", nil, clickArea)
+    pulse:SetAllPoints()
+    pulse:SetFrameLevel(clickArea:GetFrameLevel() + 5)
+    local pulseTex = pulse:CreateTexture(nil, "OVERLAY")
+    pulseTex:SetAllPoints()
+    pulseTex:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    pulseTex:SetVertexColor(1, 1, 1, 0.7)
+    pulse:Hide()
+    btn.pulseTex = pulse
+    
+    return btn
+end
 
-    end
+function A.ResetItemBtnVisuals(btn, parent)
     btn:SetParent(parent)
     btn:Show()
     if btn.deleteBtn then btn.deleteBtn:Show() end
@@ -164,6 +188,29 @@ function A.GetGPHItemBtn(parent)
     if btn.prevWornIcon then btn.prevWornIcon:Hide() end
     if btn.wardrobeIcon then btn.wardrobeIcon:Hide() end
     btn._visualState = nil
+end
+
+function A.GetGPHItemBtn(parent)
+    GPH_ITEM_POOL_USED = GPH_ITEM_POOL_USED + 1
+    local btn = GPH_ITEM_POOL[GPH_ITEM_POOL_USED]
+    if not btn then
+        btn = A.CreateItemBtnStruct(parent, "InvRow_" .. GPH_ITEM_POOL_USED)
+        GPH_ITEM_POOL[GPH_ITEM_POOL_USED] = btn
+    end
+    A.ResetItemBtnVisuals(btn, parent)
+    return btn
+end
+
+A.GPH_BANK_POOL = {}
+A.GPH_BANK_POOL_USED = 0
+function A.GetBankItemBtn(parent)
+    A.GPH_BANK_POOL_USED = A.GPH_BANK_POOL_USED + 1
+    local btn = A.GPH_BANK_POOL[A.GPH_BANK_POOL_USED]
+    if not btn then
+        btn = A.CreateItemBtnStruct(parent, "BankRow_" .. A.GPH_BANK_POOL_USED)
+        A.GPH_BANK_POOL[A.GPH_BANK_POOL_USED] = btn
+    end
+    A.ResetItemBtnVisuals(btn, parent)
     return btn
 end
 
@@ -199,6 +246,9 @@ if _G.C_AppearanceCollection and _G.C_AppearanceCollection.CollectItemAppearance
         orig(guid)
         if _G.C_Timer and _G.C_Timer.After then
             _G.C_Timer.After(0.4, function()
+                local A = _G.FugaziBAGS
+                if A and A._gphWardrobeCache then wipe(A._gphWardrobeCache) end
+                if A then A._gphBagSpaceDirty = true end
                 if _G.RefreshGPHUI then _G.RefreshGPHUI() end
                 if _G.RefreshBankUI then _G.RefreshBankUI() end
                 if _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.RefreshSlots then

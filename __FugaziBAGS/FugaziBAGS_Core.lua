@@ -74,7 +74,7 @@ A.Bank = nil
 -- Master refresh flags
 local isRefreshPending = false
 local isBankRefreshPending = false
-local isCooldownOnly = false -- New flag for lightweight updates
+local isCooldownOnly = nil -- New flag for lightweight updates
 local isDestroyerScanPending = false
 
 A.RegisteredUpdaters = A.RegisteredUpdaters or {} -- Table for external modules to register their OnUpdate logic
@@ -86,7 +86,7 @@ eventFrame:SetScript("OnUpdate", function(self, elapsed)
     -- 1. Throttled UI Refreshes & Destroyer Scans (Debouncing events)
     if isRefreshPending or isBankRefreshPending or isDestroyerScanPending then
         self.throttle = (self.throttle or 0) + elapsed
-        if self.throttle >= 0.15 then
+        if self.throttle >= 0.3 then
             self.throttle = 0
             
             -- Skip UI redraws while Auto-Sell is actively processing items
@@ -102,9 +102,11 @@ eventFrame:SetScript("OnUpdate", function(self, elapsed)
                 isRefreshPending = false
                 local inv = A.Inventory
                 if inv and inv:IsShown() then
+                    -- Skip if Listview's own fast listener already refreshed recently
+                    local alreadyHandled = inv._lastRefreshGPHUI and (now - inv._lastRefreshGPHUI) < 0.3
                     if skipFullForList and not inv.gphGridMode then
-                        -- List view handles row cooldowns via internal OnUpdate, skip full refresh
-                    else
+                        -- list view handles row cooldowns via internal OnUpdate, skip full refresh
+                    elseif not alreadyHandled then
                         RefreshGPHUI()
                     end
                 end
@@ -122,7 +124,7 @@ eventFrame:SetScript("OnUpdate", function(self, elapsed)
                 end
             end
             
-            isCooldownOnly = false -- Reset flag
+            isCooldownOnly = nil -- Reset flag
             
             if isDestroyerScanPending then
                 isDestroyerScanPending = false
@@ -185,6 +187,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             gphFrame:SetPoint("RIGHT", UIParent, "RIGHT", -444, -4)
         end
         
+        -- Pre-size the frame once at login while guaranteed out of combat.
+        -- This ensures the frame has the correct dimensions before it can ever
+        -- be opened in combat (where NegotiateSizes is blocked to avoid taint).
+        if A.NegotiateSizes then A.NegotiateSizes(gphFrame) end
+        
         -- Apply Scale & Skin
         local base = (SV and SV.gphScale15) and 1.5 or 1
         local extra = (SV and SV.gphFrameScale) or 1
@@ -199,10 +206,17 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "BAG_UPDATE" or event == "BAG_UPDATE_DELAYED" or event == "BAG_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_COOLDOWN" or event == "GET_ITEM_INFO_RECEIVED" or event == "PLAYERBANKSLOTS_CHANGED" or event == "TRANSMOG_COLLECTION_UPDATED" then
         local bagID = ...
         local isCd = (event == "BAG_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_COOLDOWN")
+        if isCd then
+            if event == "BAG_UPDATE_COOLDOWN" and A.UpdateAllRowCooldowns then 
+                A.UpdateAllRowCooldowns() 
+            end
+            return
+        end
         
         if event == "BAG_UPDATE" then
             A.ClearBagLinkCache(bagID) 
-            A._gphBagSpaceDirty = true
+            A._gphDirtyBags = A._gphDirtyBags or {}
+            if bagID then A._gphDirtyBags[bagID] = true else A._gphBagSpaceDirty = true end
             if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
             if A.lockedDisenchantSlots then
                 for key, lockTime in pairs(A.lockedDisenchantSlots) do
@@ -225,8 +239,22 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 end
             end
         else
-            A.ClearBagLinkCache(nil) -- Clear all for bank/delayed events
-            A._gphBagSpaceDirty = true
+            if event == "GET_ITEM_INFO_RECEIVED" then
+                if A.ClearItemInfoCache then A.ClearItemInfoCache(bagID) end
+                A.ClearBagLinkCache(nil)
+                A._gphBagSpaceDirty = true
+            elseif event == "TRANSMOG_COLLECTION_UPDATED" then
+                if A._gphWardrobeCache then wipe(A._gphWardrobeCache) end
+                A.ClearBagLinkCache(nil)
+                A._gphBagSpaceDirty = true
+            elseif event == "PLAYERBANKSLOTS_CHANGED" then
+                A.ClearBagLinkCache(-1)
+                A._gphDirtyBags = A._gphDirtyBags or {}
+                A._gphDirtyBags[-1] = true
+            else
+                A.ClearBagLinkCache(nil) -- Clear all for delayed events
+                A._gphBagSpaceDirty = true
+            end
             if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
             if A.lockedDisenchantSlots then
                 for key, lockTime in pairs(A.lockedDisenchantSlots) do
@@ -251,11 +279,19 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- Use debouncing to prevent excessive updates durante looting/banking
         if gphFrame and gphFrame:IsShown() then
             isRefreshPending = true
-            if isCd then isCooldownOnly = true end
+            if not isCd then
+                isCooldownOnly = false
+            elseif isCooldownOnly == nil then
+                isCooldownOnly = true
+            end
         end
         if A.Bank and A.Bank:IsShown() then
             isBankRefreshPending = true
-            if isCd then isCooldownOnly = true end
+            if not isCd then
+                isCooldownOnly = false
+            elseif isCooldownOnly == nil then
+                isCooldownOnly = true
+            end
         end
 
         -- Always scan for autodelete if bags change, even if UI is hidden

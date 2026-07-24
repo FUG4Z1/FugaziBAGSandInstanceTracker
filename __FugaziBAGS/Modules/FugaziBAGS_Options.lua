@@ -929,9 +929,9 @@ local function CreateGridviewOptionsPanel()
     local curY = -80
 
     -- Visual backgrounds for columns
-    CreateSectionBg(panel, col1X - 10, curY + 30, 180, 185)
-    CreateSectionBg(panel, col2X - 10, curY + 30, 180, 185)
-    CreateSectionBg(panel, col3X - 10, curY + 30, 180, 185)
+    CreateSectionBg(panel, col1X - 10, curY + 30, 180, 245)
+    CreateSectionBg(panel, col2X - 10, curY + 30, 180, 245)
+    CreateSectionBg(panel, col3X - 10, curY + 30, 180, 245)
 
     local s1 = CreateFugaziSlider(panel, "FugaziGridCols", "Slots per Row", 6, 16, 1, "gridCols", 10, col1X, curY, false, "Set how many item slots are displayed horizontally in each row.")
     local s2 = CreateFugaziSlider(panel, "FugaziGridSlotSize", "Slot Size", 20, 45, 1, "gridSlotSize", 30, col2X, curY, false, "Adjust the size of each individual item slot.")
@@ -948,7 +948,117 @@ local function CreateGridviewOptionsPanel()
     local s6b = CreateFugaziSlider(panel, "FugaziGridProtectedKeyAlpha", "Protected Overlay Visibility", 0.10, 0.50, 0.05, "gridProtectedKeyAlpha", 0.20, col3X, curY, true, "Set the opacity of the secondary protected overlay icon.")
 
 
+    curY = -230
+    local s9 = CreateFugaziSlider(panel, "FugaziListViewHeight", "List View Height", 200, 800, 10, "gphListViewHeight", 520, col1X, curY, false, "Set a fixed height for list view when auto-adjust is disabled.")
+
+    local cbListAuto = CreateFrame("CheckButton", "FugaziBAGSListHeightAuto", panel, "OptionsCheckButtonTemplate")
+    cbListAuto:SetPoint("TOPLEFT", s9, "BOTTOMLEFT", -5, -15)
+    SkinCheckBox(cbListAuto)
     
+    cbListAuto.text = _G[cbListAuto:GetName() .. "Text"]
+    if cbListAuto.text then
+        cbListAuto.text:SetText("Auto-Adjust Height")
+        cbListAuto.text:SetFontObject("GameFontNormalSmall")
+    end
+    cbListAuto:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Auto-Adjust Height", 1, 1, 1)
+        GameTooltip:AddLine("Automatically match the list view height to the grid view.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    cbListAuto:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    
+    cbListAuto:SetScript("OnClick", function(self)
+        local SV = _G.FugaziBAGSDB or {}
+        local isChecked = self:GetChecked() and true or false
+        SV.gphListViewHeightAuto = isChecked
+        if isChecked then
+            s9:SetAlpha(0.5)
+            s9:EnableMouse(false)
+        else
+            s9:SetAlpha(1.0)
+            s9:EnableMouse(true)
+        end
+        if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+    end)
+
+    local s10 = CreateFugaziSlider(panel, "FugaziListViewWidth", "List View Width", 200, 800, 10, "gphListViewWidth", 340, col2X, curY, false, "Set a fixed width for list view when auto-adjust is disabled.")
+    
+    local cbListAutoW = CreateFrame("CheckButton", "FugaziBAGSListWidthAuto", panel, "OptionsCheckButtonTemplate")
+    cbListAutoW:SetPoint("TOPLEFT", s10, "BOTTOMLEFT", -5, -15)
+    SkinCheckBox(cbListAutoW)
+    
+    cbListAutoW.text = _G[cbListAutoW:GetName() .. "Text"]
+    if cbListAutoW.text then
+        cbListAutoW.text:SetText("Auto-Adjust Width")
+        cbListAutoW.text:SetFontObject("GameFontNormalSmall")
+    end
+    cbListAutoW:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Auto-Adjust Width", 1, 1, 1)
+        GameTooltip:AddLine("Automatically match the list view width to the grid view.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    cbListAutoW:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    
+    cbListAutoW:SetScript("OnClick", function(self)
+        local SV = _G.FugaziBAGSDB or {}
+        local isChecked = self:GetChecked() and true or false
+        SV.gphListViewWidthAuto = isChecked
+        if isChecked then
+            s10:SetAlpha(0.5)
+            s10:EnableMouse(false)
+        else
+            s10:SetAlpha(1.0)
+            s10:EnableMouse(true)
+        end
+        if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+    end)
+    
+    s10:HookScript("OnValueChanged", function()
+        if not s10._isRefreshing then
+            if A.Inventory and A.Inventory.frame and A.Inventory.frame.NegotiateSizes then
+                A.Inventory.frame:NegotiateSizes()
+            end
+            if A.Bank and A.Bank.NegotiateSizes then
+                A.Bank:NegotiateSizes()
+            end
+        end
+    end)
+    
+    local cbBankFloat = CreateFrame("CheckButton", "FugaziBAGSBankFloatCheck", panel, "OptionsCheckButtonTemplate")
+    cbBankFloat:SetPoint("TOPLEFT", col3X - 5, curY - 35)
+    SkinCheckBox(cbBankFloat)
+    
+    cbBankFloat.text = _G[cbBankFloat:GetName() .. "Text"]
+    if cbBankFloat.text then
+        cbBankFloat.text:SetText("Free float Bank")
+        cbBankFloat.text:SetFontObject("GameFontNormalSmall")
+    end
+    cbBankFloat:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Free float Bank", 1, 1, 1)
+        GameTooltip:AddLine("Disable snapping to the inventory so the bank window remembers where you drag it.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    cbBankFloat:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    
+    cbBankFloat:SetScript("OnClick", function(self)
+        local SV = _G.FugaziBAGSDB or {}
+        SV.gphBankFreeFloat = (self:GetChecked() and true or false)
+    end)
+    
+    s9:HookScript("OnValueChanged", function()
+        if not s9._isRefreshing then
+            if A.Inventory and A.Inventory.frame and A.Inventory.frame.NegotiateSizes then
+                A.Inventory.frame:NegotiateSizes()
+            end
+            if A.Bank and A.Bank.NegotiateSizes then
+                A.Bank:NegotiateSizes()
+            end
+        end
+    end)
+
 
     panel.refresh = function()
         local SV = _G.FugaziBAGSDB or {}
@@ -992,6 +1102,40 @@ local function CreateGridviewOptionsPanel()
         s8._isRefreshing = true
         s8:SetValue((SV.gphFrameAlpha or 1.00) * 100)
         s8._isRefreshing = false
+
+        local isAuto = SV.gphListViewHeightAuto
+        if isAuto == nil then isAuto = true end
+        cbListAuto:SetChecked(isAuto)
+        if isAuto then
+            s9:SetAlpha(0.5)
+            s9:EnableMouse(false)
+        else
+            s9:SetAlpha(1.0)
+            s9:EnableMouse(true)
+        end
+
+        s9._isRefreshing = true
+        s9:SetValue(SV.gphListViewHeight or 520)
+        s9._isRefreshing = false
+        
+        local isAutoW = SV.gphListViewWidthAuto
+        if isAutoW == nil then isAutoW = true end
+        cbListAutoW:SetChecked(isAutoW)
+        if isAutoW then
+            s10:SetAlpha(0.5)
+            s10:EnableMouse(false)
+        else
+            s10:SetAlpha(1.0)
+            s10:EnableMouse(true)
+        end
+
+        s10._isRefreshing = true
+        s10:SetValue(SV.gphListViewWidth or 340)
+        s10._isRefreshing = false
+        
+        local isFloat = SV.gphBankFreeFloat
+        if isFloat == nil then isFloat = false end
+        cbBankFloat:SetChecked(isFloat)
     end
 
     local function ResetScaleDefaults()
@@ -1760,6 +1904,12 @@ function A.GPHTitleMenu_Initialize(self, level)
                             end
                         end
                     end
+                    C_Timer.After(0.5, function()
+                        local A = _G.FugaziBAGS
+                        if A and A._gphWardrobeCache then wipe(A._gphWardrobeCache) end
+                        if A then A._gphBagSpaceDirty = true end
+                        if _G.RefreshGPHUI then _G.RefreshGPHUI() end
+                    end)
                 end
                 CloseDropDownMenus()
             end
@@ -1835,19 +1985,20 @@ function A.GPHTitleMenu_Initialize(self, level)
         end
 
         
-        local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
-        local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
-        if hasDE or hasProspect then
-            info = UIDropDownMenu_CreateInfo()
-            info.text = "Destroy"
-            info.isNotRadio = true
-            info.checked = not A.GetPerChar("gphHideDestroyBtn", false)
-            info.func = function()
-                A.SetPerChar("gphHideDestroyBtn", not A.GetPerChar("gphHideDestroyBtn", false))
-                if f.UpdateGPHProfessionButtons then f:UpdateGPHProfessionButtons() end
+        info = UIDropDownMenu_CreateInfo()
+        info.text = "Autodelete"
+        info.isNotRadio = true
+        info.checked = not A.GetPerChar("gphPauseAutodelete", false)
+        info.func = function()
+            local newState = not A.GetPerChar("gphPauseAutodelete", false)
+            A.SetPerChar("gphPauseAutodelete", newState)
+            if not newState then
+                if A.ScanBagsForDestruction then A.ScanBagsForDestruction() end
+            else
+                if A.destroyQueue then wipe(A.destroyQueue) end
             end
-            UIDropDownMenu_AddButton(info)
         end
+        UIDropDownMenu_AddButton(info)
 
         if MailFrame and MailFrame:IsShown() and f.gphMailBtn then
             info = UIDropDownMenu_CreateInfo()

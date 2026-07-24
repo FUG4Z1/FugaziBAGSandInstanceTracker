@@ -15,22 +15,39 @@ local function GetSearchTooltip()
     return scanTooltip
 end
 
+Search.TooltipCache = {}
+
+function Search.ClearTooltipCache()
+    wipe(Search.TooltipCache)
+end
+
 --- Scans item tooltip for a specific string (case-insensitive).
 function Search.TooltipContains(link, queryLower)
     if not link or not queryLower or queryLower == "" then return false end
-    local st = GetSearchTooltip()
-    st:ClearLines()
-    st:SetHyperlink(link)
     
-    local name = st:GetName()
-    for i = 1, st:NumLines() do
-        local line = _G[name .. "TextLeft" .. i]
-        if line then
-            local text = line:GetText()
-            if text and text:lower():find(queryLower, 1, true) then
-                return true
+    local cachedStr = Search.TooltipCache[link]
+    if not cachedStr then
+        local st = GetSearchTooltip()
+        st:ClearLines()
+        st:SetHyperlink(link)
+        
+        local parts = {}
+        local name = st:GetName()
+        for i = 1, st:NumLines() do
+            local line = _G[name .. "TextLeft" .. i]
+            if line then
+                local text = line:GetText()
+                if text then
+                    table.insert(parts, text:lower())
+                end
             end
         end
+        cachedStr = table.concat(parts, " ")
+        Search.TooltipCache[link] = cachedStr
+    end
+    
+    if cachedStr:find(queryLower, 1, true) then
+        return true
     end
     return false
 end

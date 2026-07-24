@@ -178,6 +178,7 @@ end
 local function IsItemProtected(bag, slot)
     local Addon = _G.FugaziBAGS
     if not Addon then return false end
+    local isBank = (bag == -1 or (bag >= 5 and bag <= 11))
     local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
     if not link then return false end
     local itemId = tonumber(link:match("item:(%d+)"))
@@ -185,7 +186,8 @@ local function IsItemProtected(bag, slot)
     local _, _, q = A.GetCachedItemInfo(link)
     q = q or 0
     if A.IsItemProtectedAPI then
-        return A.IsItemProtectedAPI(itemId, q)
+        -- Pass isBank as the ignoreRarity flag so the bank ignores rarity protection but keeps manual protection
+        return A.IsItemProtectedAPI(itemId, q, isBank)
     end
     return false
 end
@@ -204,8 +206,38 @@ local function RefreshSlot(bag, slot, match, searchMatch)
     local btn = slotButtons[bag] and slotButtons[bag][slot]
     if not btn then return end
     local tex, cnt, locked = GetContainerItemInfo(bag, slot)
+    
+    local ilvlStr = nil
+    if tex then
+        local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+        if link then
+            local _, _, _, itemLevel, _, _, _, _, itemEquipLoc = A.GetCachedItemInfo(link, bag, slot)
+            if not itemEquipLoc then
+                _, _, _, itemLevel, _, _, _, _, itemEquipLoc = GetItemInfo(link)
+            end
+            if itemEquipLoc and itemEquipLoc ~= "" and itemEquipLoc ~= "INVTYPE_BAG" and itemEquipLoc ~= "INVTYPE_TABARD" and itemEquipLoc ~= "INVTYPE_BODY" then
+                if itemLevel and itemLevel > 1 then
+                    ilvlStr = tostring(itemLevel)
+                end
+            end
+        end
+    end
+
     SetItemButtonTexture(btn, tex)
-    SetItemButtonCount(btn, cnt)
+    
+    local countText = btn.Count or (btn.GetName and _G[btn:GetName().."Count"])
+    if ilvlStr and (not cnt or cnt <= 1) then
+        SetItemButtonCount(btn, 0) -- Hide default count
+        if countText then 
+            countText:SetText(ilvlStr)
+            countText:Show()
+            countText:SetTextColor(0.5, 1, 0.5) 
+        end
+    else
+        SetItemButtonCount(btn, cnt)
+        if countText then countText:SetTextColor(1, 1, 1) end
+    end
+    
     if match == nil then match = true end
     local q = tex and ItemQuality(bag, slot)
     SetItemButtonDesaturated(btn, locked or not match or (q == 0))
@@ -986,6 +1018,7 @@ local function ShowInFrame(f)
     f.ComputeFrameSize = ComputeFrameSize
     if f.scrollFrame then f.scrollFrame:Hide() end
     if f.gphScrollBar then f.gphScrollBar:Hide() end
+    if f.bagRow and f.bagRow:IsShown() then f.bagRow:Hide() end
     gridContent:Show(); LayoutGrid()
 end
 
@@ -1010,11 +1043,7 @@ local function HideInFrame(f)
         f.gphGridContent = nil
         if f.scrollFrame then f.scrollFrame:Show() end
         if f.gphScrollBar then f.gphScrollBar:Show() end
-        local w = f.gphGridFrameW or 340
-        local h = f.gphGridFrameH or f.EXPANDED_HEIGHT or 520
-        if not InCombatLockdown() then
-            f:SetSize(w, h)
-        end
+        if f.bagRowVisible and f.bagRow then f.bagRow:Show() end
     end
     gphRef = nil
 end
@@ -1044,8 +1073,37 @@ local function BankRefreshSlot(bag, slot, match, searchMatch)
     local btn = bankSlotButtons[bag] and bankSlotButtons[bag][slot]
     if not btn then return end
     local tex, cnt, locked = GetContainerItemInfo(bag, slot)
+    
+    local ilvlStr = nil
+    if tex then
+        local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
+        if link then
+            local _, _, _, itemLevel, _, _, _, _, itemEquipLoc = A.GetCachedItemInfo(link, bag, slot)
+            if not itemEquipLoc then
+                _, _, _, itemLevel, _, _, _, _, itemEquipLoc = GetItemInfo(link)
+            end
+            if itemEquipLoc and itemEquipLoc ~= "" and itemEquipLoc ~= "INVTYPE_BAG" and itemEquipLoc ~= "INVTYPE_TABARD" and itemEquipLoc ~= "INVTYPE_BODY" then
+                if itemLevel and itemLevel > 1 then
+                    ilvlStr = tostring(itemLevel)
+                end
+            end
+        end
+    end
+
     SetItemButtonTexture(btn, tex)
-    SetItemButtonCount(btn, cnt)
+    
+    local countText = btn.Count or (btn.GetName and _G[btn:GetName().."Count"])
+    if ilvlStr and (not cnt or cnt <= 1) then
+        SetItemButtonCount(btn, 0) -- Hide default count
+        if countText then 
+            countText:SetText(ilvlStr)
+            countText:Show()
+            countText:SetTextColor(0.5, 1, 0.5) 
+        end
+    else
+        SetItemButtonCount(btn, cnt)
+        if countText then countText:SetTextColor(1, 1, 1) end
+    end
     if match == nil then match = true end
     local q = tex and ItemQuality(bag, slot)
     SetItemButtonDesaturated(btn, locked or not match or (q == 0))
@@ -1301,7 +1359,13 @@ local function ShowInBankFrame(f)
             if bankGridContent and bankGridContent:IsShown() then BankRefreshAllSlots() end
         end)
 
-        bankEventFrame:SetScript("OnEvent", function()
+        bankEventFrame:SetScript("OnEvent", function(self, event, ...)
+            local arg1 = ...
+            if event == "BAG_UPDATE" then
+                if A.WipeBagLinkCache then A.WipeBagLinkCache(arg1) end
+            elseif event == "PLAYERBANKSLOTS_CHANGED" then
+                if A.WipeBagLinkCache then A.WipeBagLinkCache(-1) end
+            end
             if bankGridContent and bankGridContent:IsShown() and bankDeferFrame then
                 bankDeferFrame:Show()
             end

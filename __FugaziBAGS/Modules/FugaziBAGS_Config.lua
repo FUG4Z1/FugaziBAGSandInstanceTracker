@@ -23,14 +23,17 @@ local DEFAULTS = {
     gphScale15 = false, -- Legacy toggle for 1.5 multiplier
     gphSortMode = "category", -- "rarity", "vendor", "itemlevel", "category"
     gphSkin = "elvui_real",
+    gphCategoryHeaderFontCustom = false,
+    gphItemDetailsCustom = false,
+    gphItemDetailsIconSize = 27,
     
     -- Grid/List specific
     gphGridMode = true,
     gridCols = 11,
-    gridSlotSize = 36,
-    gridSpacing = 4,
-    gridBorderSize = 3,
-    gridGlowAlpha = 0.80,
+    gridSlotSize = 37,
+    gridSpacing = 3,
+    gridBorderSize = 2,
+    gridGlowAlpha = 0.55,
     gridProtDesat = 0.35,
     gridProtectedKeyAlpha = 0.20,
     
@@ -41,7 +44,12 @@ local DEFAULTS = {
 
     -- Tweaks
     gphAutoQuestGossip = false,
-    gphProtectPreviouslyWorn = true,
+    gphProtectPreviouslyWorn = false,
+    
+    gphListViewHeightAuto = true,
+    gphListViewHeight = 420,
+    gphListViewWidthAuto = true,
+    gphBankFreeFloat = false,
 }
 
 -- Registry for option change listeners

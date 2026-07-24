@@ -225,6 +225,7 @@ function A.HandleBagSlotClick(frame, button, down)
     -- TRIGGER CLICK SHIELD: Freeze tooltip anchoring/moving for 150ms to survive the BAG_UPDATE flurry.
     -- (The actual item click, pickup, and modifiers are securely handled by ContainerFrameItemButtonTemplate and modOverlay)
     A.gphTooltipShield = GetTime() + 0.15
+    A._gphLastItemUseTime = GetTime()
 end
 
 --- Handle specialized modifier actions (Alt+LMB for Protection, Ctrl+RMB for Autodelete).
@@ -245,16 +246,14 @@ function A.HandleModifierAction(frame, button, bag, slot, altDown, ctrlDown, shi
         
         -- Refresh UI
         A.RefreshBagUIs(bag)
-        
-        -- To prevent item being "picked up" effectively, we clear cursor
-        if ClearCursor then ClearCursor() end
-        PickupContainerItem(bag, slot)
-        if ClearCursor then ClearCursor() end
+
 
     -- Ctrl+RMB: Add to Auto-Destroy List (Requires double-click logic similar to Gridview)
     elseif ctrlDown and not altDown and button == "RightButton" then
-        -- Skip Bank slots for autodelete context if desired
-        -- if bag == -1 or (bag >= 5 and bag <= 11) then return end
+        -- Skip Bank slots for autodelete context
+        if bag == -1 or (bag >= 5 and bag <= 11) then
+            return
+        end
         
         if itemId == A.HEARTHSTONE_ID then return end -- Hearthstone safety
         
@@ -559,6 +558,7 @@ function A.GPHQualBtn_OnClick(self, button)
             gphFrame._refreshImmediate = true
             gphFrame.gphScrollToDefaultOnNextRefresh = true
         end
+        if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
         if isBank and _G.RefreshBankUI then _G.RefreshBankUI()
         else A.RefreshGPHUI() end
         return
@@ -570,6 +570,7 @@ function A.GPHQualBtn_OnClick(self, button)
             gphFrame._refreshImmediate = true
         end
         for qKey in pairs(A.pendingQuality or {}) do A.pendingQuality[qKey] = nil end
+        if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
         if isBank and _G.RefreshBankUI then _G.RefreshBankUI()
         else A.RefreshGPHUI() end
         return

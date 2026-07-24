@@ -502,7 +502,8 @@ local function ApplyToComponent(frame, compType, subType, context)
     elseif compType == "Row" then
         if not frame.bg then
             local bg = frame:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
+            bg:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+            bg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 1)
             bg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
             frame.bg = bg
         end
@@ -561,7 +562,7 @@ local function SkinScrollBar(self)
         local bg = scrollbar:CreateTexture(nil, "BACKGROUND")
         bg:SetPoint("TOPLEFT", scrollbar, "TOPLEFT", 0, 0)
         bg:SetPoint("BOTTOMRIGHT", scrollbar, "BOTTOMRIGHT", 0, 0)
-        bg:SetTexture(0, 0, 0, 0.4) -- Semi-transparent dark rail
+        bg:SetTexture(0, 0, 0, 0) -- Set to 0 alpha to remove weird dark backdrop
         scrollbar.bg = bg
     end
 

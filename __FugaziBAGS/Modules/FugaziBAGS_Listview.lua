@@ -99,12 +99,18 @@ local function GPH_Internal_Sort_Comparator(a, b)
     return A.GPH_Sort_CategoryGroup and A.GPH_Sort_CategoryGroup(a, b) or false
 end
 
-function A.RefreshGPHUI()
-    local gphFrame = A.Inventory
-    if not gphFrame then return end
+function A.RefreshGPHUI(force)
     
-    -- Defer refresh while casting Disenchant/Prospecting to prevent frame drops
-    if gphFrame and (A.isDisenchanting or (UnitCastingInfo and UnitCastingInfo("player"))) then
+    local gphFrame = A.Inventory
+    if not (gphFrame and gphFrame:IsVisible()) then return end
+    if gphFrame and gphFrame._isRefreshing then 
+        
+        return 
+    end
+    
+    -- Casting deferral removed. The secure macro button prevents taint, and this allows 
+    -- the list to naturally collapse during disenchanting without leaving ghost items.
+    if false then
         if not gphFrame._refreshGPHScheduler then
             gphFrame._refreshGPHScheduler = CreateFrame("Frame", nil, gphFrame)
             gphFrame._refreshGPHScheduler:Hide()
@@ -128,15 +134,17 @@ function A.RefreshGPHUI()
     local now = (GetTime and GetTime()) or time()
     local immediate = gphFrame._refreshImmediate
     gphFrame._refreshImmediate = nil
+    
+    
 
     -- Improved Throttling: Ensure we don't drop the last update in a burst.
-    if not immediate and gphFrame._lastRefreshGPHUI and (now - gphFrame._lastRefreshGPHUI) < 0.1 then
+    if not immediate and gphFrame._lastRefreshGPHUI and (now - gphFrame._lastRefreshGPHUI) < 0.15 then
         if not gphFrame._refreshGPHScheduler then
             gphFrame._refreshGPHScheduler = CreateFrame("Frame", nil, gphFrame)
             gphFrame._refreshGPHScheduler:Hide()
             gphFrame._refreshGPHScheduler:SetScript("OnUpdate", function(self, elapsed)
                 self._timer = (self._timer or 0) + elapsed
-                if self._timer >= 0.1 then
+                if self._timer >= 0.15 then
                     self._timer = 0
                     self:Hide()
                     if A.RefreshGPHUI then A.RefreshGPHUI() end
@@ -178,7 +186,7 @@ function A.RefreshGPHUI()
     if _G.UpdateSortIcon then _G.UpdateSortIcon() end
     
     if not gphFrame.gphGridMode then
-        if A.ResetGPHPools then A.ResetGPHPools() end
+        if A.ResetGPHQualityPool then A.ResetGPHQualityPool() end
     end
     
     A.ResetGPHDataPools()
@@ -189,7 +197,7 @@ function A.RefreshGPHUI()
     local content = gphFrame.content
     local sf = gphFrame.scrollFrame
     if sf and content then
-        local sfW = sf:GetWidth()
+        local sfW = gphFrame:GetWidth() - 44
         if not sfW or sfW < 50 then sfW = 340 end
         content:SetWidth(sfW)
         gphFrame.gphDynContentWidth = sfW
@@ -255,7 +263,9 @@ function A.RefreshGPHUI()
 	
     local typeCache = DB.gphItemTypeCache or {}
     DB.gphItemTypeCache = typeCache
-    local aggregated, usedSlots, totalSlots = A.GetInventoryData({0, 1, 2, 3, 4})
+    local bagsToScan = {0, 1, 2, 3, 4}
+    if gphFrame._keyringForcedShown then table.insert(bagsToScan, -2) end
+    local aggregated, usedSlots, totalSlots = A.GetInventoryData(bagsToScan)
 
     -- Bag space and border color logic now uses the cached/pre-calculated values
     do
@@ -287,12 +297,12 @@ function A.RefreshGPHUI()
         itemRecord.itemType = agg.itemType
         itemRecord.isProtected = (isProtected or isWorn)
         itemRecord.previouslyWorn = isWorn
+        itemRecord.isEquip = agg.isEquip
 
         table.insert(workingList, itemRecord)
     end
     
-    -- Update rarity bar counts from the fresh working list (Unified in Sort.lua)
-	if A.GPH_SyncRarityBar then A.GPH_SyncRarityBar(workingList, gphFrame) end
+    -- Rarity bar counts are synced after LayoutRarityBar (below) to ensure buttons exist first.
     
     
     
@@ -326,13 +336,21 @@ function A.RefreshGPHUI()
         local bagText = usedSlots .. "/" .. totalSlots
         A.SafeSetText(gphFrame.gphBagSpaceBtn.fs, bagText)
         
-        local SV = _G.FugaziBAGSDB
-        if SV and SV.gphCategoryHeaderFontCustom then
-            local path = A.GetCategoryHeaderFontAndSize()
-            gphFrame.gphBagSpaceBtn.fs:SetFont(path, 10, "")
-        else
-            gphFrame.gphBagSpaceBtn.fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+        -- Dynamically shrink font size if text overflows the fixed 36px width
+        local fs = gphFrame.gphBagSpaceBtn.fs
+        local font, size, flags = fs:GetFont()
+        local baseSize = size or 11
+        local currentWidth = fs:GetStringWidth()
+        if currentWidth > 36 then
+            local wantedSize = baseSize
+            while wantedSize > 6 do
+                wantedSize = wantedSize - 1
+                fs:SetFont(font, wantedSize, flags)
+                if fs:GetStringWidth() <= 36 then break end
+            end
         end
+        
+        -- Font sizing is now purely delegated to the skinning engine (skins.lua) to ensure it matches the Bank.
         gphFrame.gphBagSpaceBtn:SetSize(bagW, bagH)
         gphFrame.gphBagSpaceBtn:ClearAllPoints()
         
@@ -355,7 +373,8 @@ function A.RefreshGPHUI()
 
     -- Shared Rarity Bar Layout (Inventory)
     A.LayoutRarityBar(gphFrame, headerParent, A.GPHQualBtn_OnClick)
-        
+    -- Sync rarity bar colors AFTER layout ensures buttons exist
+    if A.GPH_SyncRarityBar then A.GPH_SyncRarityBar(workingList, gphFrame) end
     -- Layout is now handled by LayoutRarityBar and OnSizeChanged hooks inside it.
     if headerParent and not headerParent._fugaziLayoutHooked then
         headerParent._fugaziLayoutHooked = true
@@ -544,8 +563,13 @@ function A.RefreshGPHUI()
         end
     end
 
-    if gphFrame.gphCategoryDividerPool then for _, d in ipairs(gphFrame.gphCategoryDividerPool) do d:Hide() end end
+    local listToUse = gphFrame.gphCategoryDrawList or workingList
+    local listForAdvance = gphFrame.gphCategoryItemList or workingList
+
     if #workingList == 0 then
+        if gphFrame.gphCategoryDividerPool then for _, d in ipairs(gphFrame.gphCategoryDividerPool) do d:Hide() end end
+        if A.ResetGPHTextPool then A.ResetGPHTextPool() end
+        if A.ResetGPHItemPool then A.ResetGPHItemPool() end
         local noItems = A.GetGPHText(content)
         noItems:SetPoint("TOPLEFT", content, "TOPLEFT", 8, -yOff)
         noItems:SetText("")
@@ -558,10 +582,6 @@ function A.RefreshGPHUI()
             gphFrame.gphSelectedItemLink = nil
         end
     else
-        if gphFrame.gphCategoryDividerPool then for _, d in ipairs(gphFrame.gphCategoryDividerPool) do d:Hide() end end
-        if gphFrame.gphHearthSpacerTex then gphFrame.gphHearthSpacerTex:Hide() end
-        if gphFrame.gphHearthSpacerFrame then gphFrame.gphHearthSpacerFrame:Hide() end
-        
         gphFrame._gphPrevDefaultScrollY = gphFrame.gphDefaultScrollY
         gphFrame.gphDefaultScrollY = nil  
         local selectedStillExists = false
@@ -569,10 +589,8 @@ function A.RefreshGPHUI()
         local hadSelectedItemId = gphFrame and gphFrame.gphSelectedItemId ~= nil
         local itemIdToSlot = A.GetItemIdToBagSlot()
         gphFrame._gphIdToSlotMap = itemIdToSlot 
-        local listToUse = gphFrame.gphCategoryDrawList or workingList
-        local listForAdvance = gphFrame.gphCategoryItemList or workingList
+        
         local itemIdx = 0
-        local dividerIndex = 0
         local dividerClickHandler = function(self)
             if not gphFrame.gphCategoryCollapsed then gphFrame.gphCategoryCollapsed = {} end
             local cat = self.categoryName
@@ -582,6 +600,11 @@ function A.RefreshGPHUI()
         end
 
         gphFrame._gphDivIdx = 0
+        local GPH_ITEM_POOL = A.GetGPHItemPool and A.GetGPHItemPool()
+        local new_GPH_ITEM_POOL_USED = 0
+        
+        if gphFrame.gphHearthSpacerFrame then gphFrame.gphHearthSpacerFrame:Hide() end
+        
         for idx, entry in ipairs(listToUse) do
             local newY, isDiv = A.GPH_RenderCategoryDivider(gphFrame, content, entry, yOff, dividerClickHandler)
             if isDiv then
@@ -596,65 +619,111 @@ function A.RefreshGPHUI()
                     gphFrame.gphItemIndexToY[itemIdx] = yOff
                 end
             
-            local curHearth = item.itemId == A.HEARTHSTONE_ID or (item.link and item.link:match("item:" .. A.HEARTHSTONE_ID))
-            local rowBelowDivider = false
-            if curHearth then
-                if not gphFrame.gphHearthSpacerFrame then
-                    local frame = CreateFrame("Frame", nil, content)
-                    frame:EnableMouse(false)
-                    local tex = frame:CreateTexture(nil, "ARTWORK")
-                    tex:SetTexture(0.5, 0.42, 0.18, 0.75)
-                    tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -4)
-                    tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -4)
-                    tex:SetHeight(1)
-                    tex:Show()
-                    frame.tex = tex
-                    gphFrame.gphHearthSpacerFrame = frame
-                    gphFrame.gphHearthSpacerFrame._gphDebugName = "HearthstoneSpacer"
-                    gphFrame.gphHearthSpacerTex = tex
+                local curHearth = item.itemId == A.HEARTHSTONE_ID or (item.link and item.link:match("item:" .. A.HEARTHSTONE_ID))
+                local rowBelowDivider = false
+                if curHearth then
+                    if not gphFrame.gphHearthSpacerFrame then
+                        local frame = CreateFrame("Frame", nil, content)
+                        frame:EnableMouse(false)
+                        local tex = frame:CreateTexture(nil, "ARTWORK")
+                        tex:SetTexture(0.5, 0.42, 0.18, 0.75)
+                        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -4)
+                        tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -4)
+                        tex:SetHeight(1)
+                        tex:Show()
+                        frame.tex = tex
+                        gphFrame.gphHearthSpacerFrame = frame
+                        gphFrame.gphHearthSpacerFrame._gphDebugName = "HearthstoneSpacer"
+                        gphFrame.gphHearthSpacerTex = tex
+                    end
+                    local spacer = gphFrame.gphHearthSpacerFrame
+                    spacer:SetParent(content)
+                    if spacer._gphCurrentYOff ~= yOff then
+                        spacer:ClearAllPoints()
+                        spacer:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -yOff)
+                        spacer:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, -yOff)
+                        spacer:SetHeight(10)
+                        spacer._gphCurrentYOff = yOff
+                    end
+                    spacer:Show()
+                    if spacer.tex then spacer.tex:SetHeight(1); spacer.tex:Show() end
+                    yOff = yOff + 10
+                    if gphFrame.gphDefaultScrollY == nil then
+                        gphFrame.gphDefaultScrollY = yOff  
+                    end
+                    rowBelowDivider = true
                 end
-                local spacer = gphFrame.gphHearthSpacerFrame
-                spacer:SetParent(content)
-                spacer:ClearAllPoints()
-                spacer:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -yOff)
-                spacer:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, -yOff)
-                spacer:SetHeight(10)
-                spacer:Show()
-                if spacer.tex then spacer.tex:SetHeight(1); spacer.tex:Show() end
-                yOff = yOff + 10
-                if gphFrame.gphDefaultScrollY == nil then
-                    gphFrame.gphDefaultScrollY = yOff  
+                
+                -- DELTA RENDER INVENTORY ROW
+                new_GPH_ITEM_POOL_USED = new_GPH_ITEM_POOL_USED + 1
+                
+                local btn = GPH_ITEM_POOL and GPH_ITEM_POOL[new_GPH_ITEM_POOL_USED]
+                if not btn then
+                    if A.SetGPHItemPoolUsed then A.SetGPHItemPoolUsed(new_GPH_ITEM_POOL_USED - 1) end
+                    btn = A.GetGPHItemBtn(content)
+                else
+                    local wasHidden = not btn:IsShown()
+                    btn:SetParent(content)
+                    btn:Show()
+                    if wasHidden then
+                        btn._gphCurrentYOff = nil
+                        btn._gphCurrentWidth = nil
+                    end
+                    if btn.deleteBtn then btn.deleteBtn:Show() end
+                    btn.clickArea:Show()
+                    btn.clickArea:EnableMouse(true)
+                    btn.itemLink = nil
+                    if btn.pulseTex then btn.pulseTex:Hide() end
+                    if btn.cooldownOverlay then btn.cooldownOverlay:Hide() end
                 end
-                rowBelowDivider = true
-            end
-            local btn = A.GetGPHItemBtn(content)
-            local rowOk, rowErr = pcall(A.UpdateGPHRowVisuals, btn, item, itemIdx, yOff, rowBelowDivider, destroyList, gphFrame, itemIdToSlot)
-            
-            if rowOk then
-                -- Formatting like icon size and font is already applied in UpdateGPHRowVisuals
-                -- but we should ensure isSelected is handled correctly for the visual feedback.
-                local capturedId = item.itemId or (item.link and tonumber(item.link:match("item:(%d+)")))
-                local isSelected = gphFrame and (
-                    (item.bag ~= nil and item.slot ~= nil and gphFrame.gphSelectedBag == item.bag and gphFrame.gphSelectedSlot == item.slot)
-                    or (item.bag == nil and gphFrame.gphSelectedItemId and capturedId == gphFrame.gphSelectedItemId)
-                    or (gphFrame.gphSelectedIndex and gphFrame.gphSelectedIndex == itemIdx)
-                )
-                if isSelected then
-                    selectedStillExists = true
-                    selectedRowBtn = btn
-                    gphFrame.gphSelectedIndex = itemIdx
-                    gphFrame.gphSelectedRowY = yOff
-                    gphFrame.gphSelectedBag = item.bag
-                    gphFrame.gphSelectedSlot = item.slot
+                
+                if btn._gphCurrentYOff ~= yOff then
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -yOff)
+                    btn:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, -yOff)
+                    btn._gphCurrentYOff = yOff
                 end
-            else
-                A.AddonPrint("[Fugazi] GPH row " .. tostring(itemIdx) .. " error: " .. tostring(rowErr))
-            end
-            
-            local rowStep = A.ComputeItemDetailsRowHeight(18)
-            yOff = yOff + rowStep
+                
+                local rowOk, rowErr = pcall(A.UpdateGPHRowVisuals, btn, item, new_GPH_ITEM_POOL_USED, yOff, rowBelowDivider, destroyList, gphFrame, itemIdToSlot, true)
+                
+                if rowOk then
+                    local capturedId = item.itemId or (item.link and tonumber(item.link:match("item:(%d+)")))
+                    local isSelected = gphFrame and (
+                        (item.bag ~= nil and item.slot ~= nil and gphFrame.gphSelectedBag == item.bag and gphFrame.gphSelectedSlot == item.slot)
+                        or (item.bag == nil and gphFrame.gphSelectedItemId and capturedId == gphFrame.gphSelectedItemId)
+                        or (gphFrame.gphSelectedIndex and gphFrame.gphSelectedIndex == itemIdx)
+                    )
+                    if isSelected then
+                        selectedStillExists = true
+                        selectedRowBtn = btn
+                        gphFrame.gphSelectedIndex = itemIdx
+                        gphFrame.gphSelectedRowY = yOff
+                        gphFrame.gphSelectedBag = item.bag
+                        gphFrame.gphSelectedSlot = item.slot
+                    end
+                else
+                    A.AddonPrint("[Fugazi] GPH row " .. tostring(itemIdx) .. " error: " .. tostring(rowErr))
+                end
+                
+                local rowStep = A.ComputeItemDetailsRowHeight(18)
+                yOff = yOff + rowStep
             end
         end
+        
+        -- HIDE LEFTOVERS (Garbage Collection)
+        if GPH_ITEM_POOL then
+            for i = new_GPH_ITEM_POOL_USED + 1, #GPH_ITEM_POOL do
+                if GPH_ITEM_POOL[i] then GPH_ITEM_POOL[i]:Hide() end
+            end
+        end
+        
+        if gphFrame.gphCategoryDividerPool then
+            for i = gphFrame._gphDivIdx + 1, #gphFrame.gphCategoryDividerPool do
+                if gphFrame.gphCategoryDividerPool[i] then gphFrame.gphCategoryDividerPool[i]:Hide() end
+            end
+        end
+        
+        if A.SetGPHItemPoolUsed then A.SetGPHItemPoolUsed(new_GPH_ITEM_POOL_USED) end
         
         if gphFrame and not selectedStillExists and hadSelectedItemId then
             local nextIdx = gphFrame.gphSelectedIndex and math.min(gphFrame.gphSelectedIndex, #listForAdvance) or 1
@@ -817,26 +886,34 @@ function A.RefreshGPHUI()
     
     
     if refreshOk and gphFrame and gphFrame._pendingScrollToDefault ~= nil then
-        local wantCur = gphFrame._pendingScrollToDefault
-        local f = gphFrame
-        C_Timer.After(0.01, function()
-            if not (f and f.gphScrollBar and f.scrollFrame) then return end
-            if f.gphGridMode then return end
-            local content = f.scrollFrame:GetScrollChild()
-            local viewHeight = f.scrollFrame:GetHeight()
-            local contentHeight = content and content:GetHeight() or 0
-            local maxScroll = math.max(0, contentHeight - viewHeight)
-            local cur = math.min(wantCur, maxScroll)
-            f.gphScrollOffset = cur
-            f.gphScrollBar:SetMinMaxValues(0, maxScroll)
-            f.gphScrollBar:SetValue(cur)
-            if content then
-                content:ClearAllPoints()
-                content:SetPoint("TOPLEFT", f.scrollFrame, "TOPLEFT", 0, cur)
-                content:SetWidth(f.gphDynContentWidth or 340)
-            end
-            f._pendingScrollToDefault = nil
-        end)
+        if not gphFrame._scrollCorrectionFrame then
+            gphFrame._scrollCorrectionFrame = CreateFrame("Frame")
+            gphFrame._scrollCorrectionFrame:Hide()
+            gphFrame._scrollCorrectionFrame:SetScript("OnUpdate", function(self)
+                self:Hide()
+                local f = self._target
+                local wantCur = self._wantCur
+                if not (f and f.gphScrollBar and f.scrollFrame) then return end
+                if f.gphGridMode then return end
+                local content = f.scrollFrame:GetScrollChild()
+                local viewHeight = f.scrollFrame:GetHeight()
+                local contentHeight = content and content:GetHeight() or 0
+                local maxScroll = math.max(0, contentHeight - viewHeight)
+                local cur = math.min(wantCur, maxScroll)
+                f.gphScrollOffset = cur
+                f.gphScrollBar:SetMinMaxValues(0, maxScroll)
+                f.gphScrollBar:SetValue(cur)
+                if content then
+                    content:ClearAllPoints()
+                    content:SetPoint("TOPLEFT", f.scrollFrame, "TOPLEFT", 0, cur)
+                    content:SetWidth(f.gphDynContentWidth or 340)
+                end
+                f._pendingScrollToDefault = nil
+            end)
+        end
+        gphFrame._scrollCorrectionFrame._target = gphFrame
+        gphFrame._scrollCorrectionFrame._wantCur = gphFrame._pendingScrollToDefault
+        gphFrame._scrollCorrectionFrame:Show()
     end
 
     -- Cleanup unused pool frames (Hides what was not used this refresh)
@@ -874,7 +951,7 @@ local _gphEventFrame = CreateFrame("Frame")
 _gphEventFrame:RegisterEvent("BAG_UPDATE")
 _gphEventFrame:RegisterEvent("ITEM_LOCK_CHANGED")
 _gphEventFrame:RegisterEvent("PLAYER_MONEY")
-_gphEventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
+-- _gphEventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED") -- Equipment event; causes flicker by triggering a stale refresh 350ms before BAG_UPDATE. BAG_UPDATE handles all bag changes.
 _gphEventFrame:RegisterEvent("BAG_CLOSED")
 
 local _gphEventDeferFrame = CreateFrame("Frame")

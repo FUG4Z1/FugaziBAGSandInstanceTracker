@@ -2,8 +2,6 @@ local addonName, Addon = ...; Addon = Addon or _G.FugaziBAGS
 local A = Addon
 A.DB = _G.FugaziBAGSDB
 local DB = A.DB
-A.deleteClickTime = A.deleteClickTime or {}
-A.destroyClickTime = A.destroyClickTime or {}
 A.destroyQueue = A.destroyQueue or {}
 A.destroyerThrottle = A.destroyerThrottle or 0
 A.GPH_DESTROY_DELAY = 0.4
@@ -95,21 +93,6 @@ function A.GetRarityDeleteInfo(quality)
     end
     return count, value
 end
-
-
---- Cancel "delete all of this quality" flow (like Esc).
-function A.CancelRarityDel(q)
-    A.rarityDelStage = A.rarityDelStage or {}
-    A.pendingQuality = A.pendingQuality or {}
-    A.rarityDelStage[q] = nil
-    A.pendingQuality[q] = nil
-    local gf = A.Inventory
-    if gf and gf.gphEscCatcher then
-        gf.gphEscCatcher:ClearFocus()
-        gf.gphEscCatcher:Hide()
-    end
-end
-
 
 
 if not A.StartContinuousDelete then
@@ -251,95 +234,20 @@ function A.RecordAutodeleteForFIT(itemId, count, vendorCopper)
     end
 end
 
---- Delete up to amount of itemId from bags.
-function A.DeleteGPHItem(itemId, amount)
-    if not itemId or amount <= 0 then return end
-    local remaining = amount
-    for bag = 0, 4 do
-        if remaining <= 0 then break end
-        for slot = 1, GetContainerNumSlots(bag) do
-            if remaining <= 0 then break end
-            local currentId = GetContainerItemID(bag, slot)
-            if currentId == itemId then
-                local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-                local _, stackCount = GetContainerItemInfo(bag, slot)
-                if stackCount and stackCount > 0 then
-                    local deleteAmt = math.min(stackCount, remaining)
-                    local vendorCopper = 0
-                    if GetItemInfo then
-                        local v = select(11, A.GetCachedItemInfo(link or itemId))
-                        if v and v > 0 then vendorCopper = v * deleteAmt end
-                    end
-                    PickupContainerItem(bag, slot)
-                    if deleteAmt < stackCount and SplitContainerItem then
-                        SplitContainerItem(bag, slot, stackCount - deleteAmt)
-                    end
-                    if CursorHasItem and CursorHasItem() then
-                        A.RecordAutodeleteForFIT(itemId, deleteAmt, vendorCopper)
-                        DeleteCursorItem()
-                    end
-                    remaining = remaining - deleteAmt
-                end
-            end
-        end
-    end
-end
-
---- Delete one bag slot (pickup + delete item).
-function A.DeleteGPHSlot(bag, slot)
-    if bag == nil or slot == nil then return end
-    if not (PickupContainerItem and DeleteCursorItem) then return end
-    local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
-    local itemId = link and tonumber(link:match("item:(%d+)"))
-    local count = 1
-    if GetContainerItemInfo then
-        local _, c = GetContainerItemInfo(bag, slot)
-        if c and c > 0 then count = c end
-    end
-    local vendorCopper = 0
-    if link then
-        local v = select(11, A.GetCachedItemInfo(link))
-        if v and v > 0 then vendorCopper = v * count end
-    end
-    PickupContainerItem(bag, slot)
-    if CursorHasItem and CursorHasItem() then
-        A.RecordAutodeleteForFIT(itemId, count, vendorCopper)
-        DeleteCursorItem()
-    end
-end
-
-
---- Get required level + item level for destroy check (tooltip scan).
-local function GetRequiredAndItemLevelForDestroy(bag, slot)
-    local tt = A.GetScanTooltip and A.GetScanTooltip()
-    if not tt then return 0, 0 end
-    tt:ClearLines()
-    tt:SetBagItem(bag, slot)
-    local reqLevel, itemLevel = 0, 0
-    local n = tt:NumLines() or 0
-    local name = tt:GetName()
-    for i = 1, n do
-        local left = _G[name .. "TextLeft" .. i]
-        local text = left and left:GetText()
-        if text then
-            local r = text:match("Requires Level%s+(%d+)")
-            if r then reqLevel = tonumber(r) or reqLevel end
-            local l = text:match("Item Level%s+(%d+)")
-            if l then itemLevel = tonumber(l) or itemLevel end
-        end
-    end
-    return reqLevel, itemLevel
-end
-A.GetRequiredAndItemLevelForDestroy = GetRequiredAndItemLevelForDestroy
-
 --- Can we destroy this slot? (level, soulbound, protected, no cooldown.)
-local function GPHIsDestroyable(bag, slot, link)
+local function GPHIsDestroyable(bag, slot, link, optHasDE, optHasProspect)
     if not link then return nil end
     local itemId = tonumber(link:match("item:(%d+)"))
     if itemId == A.HEARTHSTONE_ID then return nil end  
 
-    local hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
-    local hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
+    local hasDE = optHasDE
+    if hasDE == nil then
+        hasDE = A.IsSpellKnownByName and A.IsSpellKnownByName("Disenchant")
+    end
+    local hasProspect = optHasProspect
+    if hasProspect == nil then
+        hasProspect = A.IsSpellKnownByName and A.IsSpellKnownByName("Prospecting")
+    end
     
     local name, _, quality, _, _, itemType, itemSubType = A.GetCachedItemInfo(link)
     if not name then return nil end
@@ -389,6 +297,7 @@ function A.GetCachedBagItems()
                                 slot = slot,
                                 link = link,
                                 itemId = itemId,
+                                name = name,
                                 quality = quality,
                                 sellPrice = sellPrice,
                                 iLevel = iLevel or 0,
@@ -412,24 +321,31 @@ local function GetFirstDestroyableInBags(preferProspect)
     if cacheDirty or not cachedList then
         cachedList = {}
         local items = A.GetCachedBagItems()
+        local invFilter = A.Inventory and A.Inventory.gphFilterQuality
+        local searchText = A.Inventory and A.Inventory.gphSearchText
+        local searchLower = searchText and searchText ~= "" and string.lower(searchText) or nil
         for i = 1, #items do
             local e = items[i]
-            local texture, _, locked = GetContainerItemInfo(e.bag, e.slot)
-            if texture and not locked then
-                local spell = GPHIsDestroyable(e.bag, e.slot, e.link)
-                if spell then
-                    if not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(e.itemId, e.quality)) then
-                        table.insert(cachedList, {
-                            bag = e.bag,
-                            slot = e.slot,
-                            spell = spell,
-                            isDE = spell:find("Disenchant", 1, true),
-                            quality = e.quality,
-                            reqLevel = e.reqLevel,
-                            iLevel = e.iLevel,
-                            link = e.link,
-                            itemId = e.itemId,
-                        })
+            if not invFilter or e.quality == invFilter then
+                if not searchLower or (A.Search and A.Search.Matches(e, searchLower)) then
+                    local texture, _, locked = GetContainerItemInfo(e.bag, e.slot)
+                    if texture and not locked then
+                        local spell = GPHIsDestroyable(e.bag, e.slot, e.link, hasDE, hasProspect)
+                        if spell then
+                            if not (A.IsItemProtectedAPI and A.IsItemProtectedAPI(e.itemId, e.quality)) then
+                                table.insert(cachedList, {
+                                    bag = e.bag,
+                                    slot = e.slot,
+                                    spell = spell,
+                                    isDE = spell:find("Disenchant", 1, true),
+                                    quality = e.quality,
+                                    reqLevel = e.reqLevel,
+                                    iLevel = e.iLevel,
+                                    link = e.link,
+                                    itemId = e.itemId,
+                                })
+                            end
+                        end
                     end
                 end
             end
@@ -509,6 +425,7 @@ function A.EnsureGPHDestroyerFrame()
     if A.Inventory then A.Inventory.destroyerFrame = A.destroyerFrame end
     A.destroyerFrame:Hide()
     A.destroyerFrame:SetScript("OnUpdate", function(self, elapsed)
+        if A.DB and A.DB.gphPauseAutodelete then self:Hide(); return end
         if #A.destroyQueue == 0 then self:Hide(); return end
         A.destroyerThrottle = A.destroyerThrottle + elapsed
         if A.destroyerThrottle >= A.GPH_DESTROY_DELAY then
@@ -556,6 +473,7 @@ end
 
 --- Add bag slots for item to destroy queue (auto-delete).
 function A.QueueDestroySlotsForItemId(itemId)
+    if A.DB and A.DB.gphPauseAutodelete then return end
     if not itemId then return end
     for bag = 0, 4 do
         local numSlots = GetContainerNumSlots and GetContainerNumSlots(bag)
@@ -579,27 +497,9 @@ function A.QueueDestroySlotsForItemId(itemId)
 end
 
 
-StaticPopupDialogs['FUGAZI_DISENCHANT_EPIC'] = {
-    text = 'Disenchant Epic/Legendary item?',
-    button1 = 'Disenchant',
-    button2 = 'Cancel',
-    OnAccept = function(self)
-        local bag, slot = self.data and self.data.bag, self.data and self.data.slot
-        if bag and slot then
-            CastSpellByName('Disenchant')
-            if SpellTargetItem then SpellTargetItem(bag, slot) end
-            local inv = A.Inventory
-            if inv and _G.RefreshGPHUI then _G.RefreshGPHUI() end
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
 --- Scan all bags for items on the autodelete list and queue them for destruction.
 function A.ScanBagsForDestruction()
+    if A.DB and A.DB.gphPauseAutodelete then return end
     local list = A.GetGphDestroyList and A.GetGphDestroyList() or {}
     if not list then return end
     
@@ -635,18 +535,32 @@ lootHandler:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
 lootHandler:RegisterEvent("UNIT_SPELLCAST_FAILED")
 lootHandler:SetScript("OnEvent", function(self, event, ...)
     if event == "LOOT_OPENED" then
+        
         if A.isDisenchanting then
             if _G.LootFrame then _G.LootFrame:Hide() end
             for i = 1, GetNumLootItems() do
                 LootSlot(i)
             end
             CloseLoot()
+            local tF = CreateFrame("Frame")
+            local elapsed = 0
+            tF:SetScript("OnUpdate", function(self, dt)
+                elapsed = elapsed + dt
+                if elapsed > 0.1 then
+                    if _G.LootFrame then _G.LootFrame:Hide() end
+                    if _G.ElvLootFrame then _G.ElvLootFrame:Hide() end
+                    CloseLoot()
+                    self:SetScript("OnUpdate", nil)
+                    self:Hide()
+                end
+            end)
         end
     elseif event == "LOOT_CLOSED" then
+        
         A.isDisenchanting = nil
         A.activeDisenchantSlot = nil
         if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
-        if A.RefreshGPHUI then A.RefreshGPHUI() end
+        -- Let BAG_UPDATE handle the refresh normally without forcing immediate rebuild
     elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
         local unit, spellName = ...
         if unit == "player" then
@@ -654,9 +568,27 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
             local pr = GetSpellInfo(31252) or "Prospecting"
             if spellName == de or spellName == pr then
                 A.isDisenchanting = nil
+                
+                -- Fast undim without triggering a full synchronous UI rebuild
+                if A.activeDisenchantSlot and A.activeDisenchantSlot.itemId then
+                    local itemId = A.activeDisenchantSlot.itemId
+                    if A.Inventory and A.Inventory.scrollFrame then
+                        local content = A.Inventory.scrollFrame:GetScrollChild()
+                        if content then
+                            for i = 1, content:GetNumChildren() do
+                                local child = select(i, content:GetChildren())
+                                local rowItemId = child.itemId or (child.itemLink and tonumber(child.itemLink:match("item:(%d+)")))
+                                if rowItemId == itemId or (A.lockedDisenchantSlots and A.lockedDisenchantSlots[tostring(child.bag) .. "_" .. tostring(child.slot)]) then
+                                    child:SetAlpha(1.0)
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                if A.lockedDisenchantSlots then wipe(A.lockedDisenchantSlots) end
                 A.activeDisenchantSlot = nil
                 if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
-                if A.RefreshGPHUI then A.RefreshGPHUI() end
             end
         end
     end

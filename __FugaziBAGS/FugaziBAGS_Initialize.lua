@@ -61,8 +61,7 @@ A.GetGPHText = A.GetGPHText or function(...) end
 A.GetGPHItemBtn = A.GetGPHItemBtn or function(...) end
 
 -- Interaction Handlers (Destroyer / Combat)
-A.DeleteGPHSlot = function(...) if A.DeleteGPHSlot then return A.DeleteGPHSlot(...) end end
-A.DeleteGPHItem = function(...) if A.DeleteGPHItem then return A.DeleteGPHItem(...) end end
+
 A.QueueDestroySlotsForItemId = function(...) if A.QueueDestroySlotsForItemId then return A.QueueDestroySlotsForItemId(...) end end
 A.IsSpellKnownByName = function(...) if A.IsSpellKnownByName then return A.IsSpellKnownByName(...) end end
 
@@ -263,16 +262,19 @@ function A.StealthHideElvUIBank()
 end
 
 
--- Auto-fill "Delete" for item deletion popups
-if StaticPopupDialogs["DELETE_GOOD_ITEM"] then
-    local oldOnShow = StaticPopupDialogs["DELETE_GOOD_ITEM"].OnShow
-    StaticPopupDialogs["DELETE_GOOD_ITEM"].OnShow = function(self, ...)
-        if oldOnShow then oldOnShow(self, ...) end
-        if self.editBox then
-            self.editBox:SetText(DELETE_ITEM_CONFIRM_STRING or "Delete")
+-- Auto-fill "Delete" for item deletion popups without tainting StaticPopupDialogs
+hooksecurefunc("StaticPopup_Show", function(which)
+    if which == "DELETE_GOOD_ITEM" then
+        for i = 1, STATICPOPUP_NUMDIALOGS do
+            local dialog = _G["StaticPopup"..i]
+            if dialog and dialog:IsShown() and dialog.which == "DELETE_GOOD_ITEM" then
+                if dialog.editBox then
+                    dialog.editBox:SetText(DELETE_ITEM_CONFIRM_STRING or "Delete")
+                end
+            end
         end
     end
-end
+end)
 
 
 
