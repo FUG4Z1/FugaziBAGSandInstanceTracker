@@ -214,15 +214,15 @@ function A.FillListRowVisuals(row, item, destroyList, isBank)
 	end
 
 	if isUnlearnedWardrobe then
-		row.wardrobeIcon:SetWidth(iconSize or 16)
-		row.wardrobeIcon:SetHeight(iconSize or 16)
+		row.wardrobeIcon:SetWidth((iconSize or 16) * 0.75)
+		row.wardrobeIcon:SetHeight((iconSize or 16) * 0.75)
 		if row.wardrobeIcon.SetAtlas then
 			row.wardrobeIcon:SetAtlas("poi-transmogrifier")
 		else
 			row.wardrobeIcon:SetTexture("Interface\\Minimap\\TRACKING\\Transmogrifier")
 		end
 		row.wardrobeIcon:ClearAllPoints()
-		row.wardrobeIcon:SetPoint("RIGHT", row.clickArea, "RIGHT", -22, 0)
+		row.wardrobeIcon:SetPoint("RIGHT", row.clickArea, "RIGHT", -34, 0)
 		row.wardrobeIcon:Show()
 	else
 		row.wardrobeIcon:Hide()

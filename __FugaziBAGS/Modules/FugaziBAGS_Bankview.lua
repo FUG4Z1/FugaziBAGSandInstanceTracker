@@ -1755,12 +1755,3 @@ function A.GetModularRarityTooltip(rarity, tt)
         tt:AddLine("Shift+RMB: Send Rarity to Bank", 0.6, 0.6, 0.6)
     end
 end
-    
-
-    -- Add Bank-specific action if bank is open
-    local f = A.Bank
-    if f and f:IsShown() then
-        tt:AddLine("Shift+RMB: Send Rarity to Bank", 0.6, 0.6, 0.6)
-    end
-end
-    
