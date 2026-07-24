@@ -19,6 +19,9 @@ StaticPopupDialogs["GPH_DELETE_QUALITY"] = {
     OnAccept = function(self, data)
         if data and data.quality then A.DeleteAllOfQuality(data.quality) end
     end,
+    OnCancel = function(self, data)
+        if data and data.quality and A.pendingQuality then A.pendingQuality[data.quality] = nil; if A.RefreshGPHUI then A.RefreshGPHUI() end end
+    end,
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
@@ -29,7 +32,11 @@ StaticPopupDialogs["GPH_CONTINUOUS_DELETE"] = {
     button1 = "|cff00ff00START|r",
     button2 = "Cancel",
     OnAccept = function(self, data)
+        if data and data.quality and A.pendingQuality then A.pendingQuality[data.quality] = nil end
         if data and data.quality then A.StartContinuousDelete(data.quality) end
+    end,
+    OnCancel = function(self, data)
+        if data and data.quality and A.pendingQuality then A.pendingQuality[data.quality] = nil; if A.RefreshGPHUI then A.RefreshGPHUI() end end
     end,
     timeout = 0,
     whileDead = true,
@@ -456,8 +463,7 @@ function A.GPHQualBtn_OnClick(self, button)
         else
             stage.clicks = stage.clicks + 1
             stage.time = now
-            if stage.clicks >= 3 then
-                A.continuousDelStage[q] = nil
+            if stage.clicks == 3 then
                 local SV = _G.FugaziBAGSDB or {}
                 if SV.gridConfirmAutoDel == false then
                     A.StartContinuousDelete(q)
@@ -465,6 +471,8 @@ function A.GPHQualBtn_OnClick(self, button)
                     local info = A.QUALITY_COLORS[q] or {}
                     local qName = info.label or ("Quality " .. q)
                     local hex = info.hex and ("|cff" .. info.hex) or "|cffffffff"
+                    A.pendingQuality = A.pendingQuality or {}
+                    A.pendingQuality[q] = now
                     StaticPopup_Show("GPH_CONTINUOUS_DELETE", hex .. qName .. "|r", nil, { quality = q })
                 end
             end
@@ -514,8 +522,7 @@ function A.GPHQualBtn_OnClick(self, button)
         else
             stage.clicks = stage.clicks + 1
             stage.time = now
-            if stage.clicks >= 3 then
-                A.rarityDelStage[q] = nil
+            if stage.clicks == 3 then
                 local SV = _G.FugaziBAGSDB or {}
                 if SV.gridConfirmAutoDel == false then
                     A.DeleteAllOfQuality(q)
@@ -525,6 +532,8 @@ function A.GPHQualBtn_OnClick(self, button)
                     local hex = info.hex and ("|cff" .. info.hex) or "|cffffffff"
                     local realCount, realValue = A.GetRarityDeleteInfo(q)
                     local worthStr = A.GPH_FormatMoney(realValue)
+                    A.pendingQuality = A.pendingQuality or {}
+                    A.pendingQuality[q] = now
                     StaticPopup_Show("GPH_DELETE_QUALITY", realCount, (hex .. qName .. "|r items in your bags?\nTotal worth: " .. worthStr), { quality = q })
                 end
             end

@@ -178,51 +178,79 @@ end
 
 --- Delete every item of one quality from bags (e.g. all grey).
 function A.DeleteAllOfQuality(quality)
-    local deletedCount = 0
     local labels = { [0] = "Grey", [1] = "White", [2] = "Green", [3] = "Blue", [4] = "Epic", [5] = "Legendary" }
     local label = labels[quality] or "Unknown"
 
-    for bag = 0, 4 do
-        for slot = GetContainerNumSlots(bag), 1, -1 do  
-            local link = GetContainerItemLink(bag, slot)
-            if link then
-                local itemId = tonumber(link:match("item:(%d+)"))
-                local _, _, itemQuality = A.GetCachedItemInfo(link)
-                if itemQuality == quality then
-                    
-                    local skip = (itemId and A.GetGphProtectedSet and A.GetGphProtectedSet()[itemId]) or false
+    if not A.BurstDeleteWorker then
+        A.BurstDeleteWorker = CreateFrame("Frame")
+        A.BurstDeleteWorker:Hide()
+        A.BurstDeleteWorker:SetScript("OnUpdate", function(self, elapsed)
+            self._t = (self._t or 0) + elapsed
+            if self._t > 0.1 then
+                self._t = 0
+                if CursorHasItem and CursorHasItem() then return end
+                
+                local deletedOne = false
+                for bag = 0, 4 do
+                    for slot = (GetContainerNumSlots(bag) or 0), 1, -1 do
+                        local link = GetContainerItemLink(bag, slot)
+                        if link then
+                            local itemId = tonumber(link:match("item:(%d+)"))
+                            local _, _, itemQuality = A.GetCachedItemInfo(link)
+                            local match = (itemQuality == self.quality) or (self.quality == 4 and itemQuality and itemQuality >= 4)
+                            if match then
+                                local skip = (itemId and A.GetGphProtectedSet and A.GetGphProtectedSet()[itemId]) or false
+                                if self.quality == 1 then
+                                    local skipThis = (itemId == A.HEARTHSTONE_ID) or A.IsQuestItem(link)
+                                    if skipThis then skip = true end
+                                end
 
-                    
-                    if quality == 1 then
-                        local skipThis = (itemId == A.HEARTHSTONE_ID) or A.IsQuestItem(link)
-                        if skipThis then skip = true end
+                                if not skip then
+                                    local _, stackCount = GetContainerItemInfo(bag, slot)
+                                    stackCount = stackCount or 1
+                                    local vendorCopper = 0
+                                    if GetItemInfo then
+                                        local v = select(11, A.GetCachedItemInfo(link))
+                                        if v and v > 0 then vendorCopper = v * stackCount end
+                                    end
+                                    PickupContainerItem(bag, slot)
+                                    if CursorHasItem and CursorHasItem() then
+                                        A.RecordAutodeleteForFIT(itemId, stackCount, vendorCopper)
+                                        DeleteCursorItem()
+                                        self.deletedCount = self.deletedCount + stackCount
+                                        deletedOne = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
                     end
+                    if deletedOne then break end
+                end
 
-                    if not skip then
-                        local _, stackCount = GetContainerItemInfo(bag, slot)
-                        stackCount = stackCount or 1
-                        local vendorCopper = 0
-                        if GetItemInfo then
-                            local v = select(11, A.GetCachedItemInfo(link))
-                            if v and v > 0 then vendorCopper = v * stackCount end
-                        end
-                        PickupContainerItem(bag, slot)
-                        if CursorHasItem and CursorHasItem() then
-                            A.RecordAutodeleteForFIT(itemId, stackCount, vendorCopper)
-                            DeleteCursorItem()
-                        end
-                        deletedCount = deletedCount + stackCount
+                if not deletedOne then
+                    self:Hide()
+                    if A.pendingQuality then A.pendingQuality[self.quality] = nil end
+                    if self.deletedCount > 0 then
+                        A.AddonPrint("[InstanceTracker] Deleted " .. self.deletedCount .. " " .. (self.label or "Unknown") .. " items.")
                     end
+                    local inv = A.Inventory
+                    if inv then inv._refreshImmediate = true end
+                    if A.RefreshGPHUI then A.RefreshGPHUI() end
                 end
             end
-        end
+        end)
     end
 
-    if deletedCount > 0 then
-        A.AddonPrint(
-            "[InstanceTracker] Deleted " .. deletedCount .. " " .. label .. " items."
-        )
-    end
+    A.BurstDeleteWorker.quality = quality
+    A.BurstDeleteWorker.label = label
+    A.BurstDeleteWorker.deletedCount = 0
+    A.BurstDeleteWorker._t = 0
+    A.BurstDeleteWorker:Show()
+    
+    local inv = A.Inventory
+    if inv then inv._refreshImmediate = true end
+    if A.RefreshGPHUI then A.RefreshGPHUI() end
 end
 
 --- Record auto-deleted item for FIT stats (vendor value).

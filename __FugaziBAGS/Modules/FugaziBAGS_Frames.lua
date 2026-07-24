@@ -1231,10 +1231,10 @@ function A.UpdateRarityButtonState(btn, now, elapsed)
     if not btn then return end
     local q = btn.quality
     
-    local active = A.continuousDelActive and A.continuousDelActive[q]
-    local contStage = A.continuousDelStage and A.continuousDelStage[q]
-    local burstStage = A.rarityDelStage and A.rarityDelStage[q]
-    local isPending = A.pendingQuality and A.pendingQuality[q]
+    local active = not btn.isBankBtn and A.continuousDelActive and A.continuousDelActive[q]
+    local contStage = not btn.isBankBtn and A.continuousDelStage and A.continuousDelStage[q]
+    local burstStage = not btn.isBankBtn and A.rarityDelStage and A.rarityDelStage[q]
+    local isPending = not btn.isBankBtn and A.pendingQuality and A.pendingQuality[q]
     local isProtected = not btn.noProtection and A.GetGphProtectedRarityFlags and A.GetGphProtectedRarityFlags()[q]
 
     if active then

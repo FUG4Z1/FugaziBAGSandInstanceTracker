@@ -849,10 +849,10 @@ local function UpdateRarityBtnVisual(f, btn, q, filterVal)
     local isProtected = not btn.noProtection and (rarityFlags and rarityFlags[q])
     
     -- BURST/CONTINUOUS DELETE COLOR OVERRIDES (Inventory Only)
-    local contStage = A.continuousDelStage and A.continuousDelStage[q]
-    local delStage = A.rarityDelStage and A.rarityDelStage[q]
-    local isContinuous = A.continuousDelActive and A.continuousDelActive[q]
-    local isPending = A.pendingQuality and A.pendingQuality[q]
+    local contStage = not btn.isBankBtn and A.continuousDelStage and A.continuousDelStage[q]
+    local delStage = not btn.isBankBtn and A.rarityDelStage and A.rarityDelStage[q]
+    local isContinuous = not btn.isBankBtn and A.continuousDelActive and A.continuousDelActive[q]
+    local isPending = not btn.isBankBtn and A.pendingQuality and A.pendingQuality[q]
 
     if isContinuous or (contStage and (contStage.clicks or 0) >= 1) or (delStage and (delStage.clicks or delStage.stage or 0) >= 1) or isPending then
         -- Let the OnUpdate script handle the fading/pulsing colors!
@@ -1758,7 +1758,16 @@ function A.GPH_UpdateRarityBarCounts(f, counts)
                 else
                     btn.labelFs:SetFont(fontPath, 8, "")
                 end
-                A.SafeSetText(btn.labelFs, count > 0 and count or "")
+                
+                local isContinuous = not btn.isBankBtn and A.continuousDelActive and A.continuousDelActive[q]
+                local contStage = not btn.isBankBtn and A.continuousDelStage and A.continuousDelStage[q]
+                local delStage = not btn.isBankBtn and A.rarityDelStage and A.rarityDelStage[q]
+                local isPending = not btn.isBankBtn and A.pendingQuality and A.pendingQuality[q]
+                local isActiveState = isContinuous or (contStage and (contStage.clicks or 0) >= 1) or (delStage and (delStage.clicks or delStage.stage or 0) >= 1) or isPending
+                
+                if not isActiveState then
+                    A.SafeSetText(btn.labelFs, count > 0 and count or "")
+                end
             end
             
             if A.UpdateRarityBtnVisual then
