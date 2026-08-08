@@ -1,0 +1,21 @@
+## Interface: 30300
+## Title: |cff87ab4f__FugaziInstanceTracker|r
+## Notes: Instance limit tracker and run ledger to record Gold, GPH and Items gained through Dungeon runs and farming sessions.
+## Author: Fugazi
+## Version: 3.0.0
+## SavedVariables: InstanceTrackerDB
+## RequiredDeps: __FugaziBAGS
+
+# Locales (enUS first; optional community locales before Locale.lua)
+Locales\enUS.lua
+Locales\Locale.lua
+
+FugaziInstanceTracker_Config.lua
+FugaziInstanceTracker_Lockouts.lua
+FugaziInstanceTracker_Core.lua
+FugaziInstanceTracker_Render.lua
+FugaziInstanceTracker_Cap.lua
+FugaziInstanceTracker_FilterBar.lua
+FugaziInstanceTracker_Ledger.lua
+FugaziInstanceTracker_Items.lua
+FugaziInstanceTracker_RunDetails.lua

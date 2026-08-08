@@ -1,0 +1,42 @@
+## Interface: 30300
+## Title: |cff87ab4f__FugaziBAGS|r
+## Notes: Customizable inventory with Lootfilter, advanced searching and more. Check Instructions in Escape Menu.
+## Author: Fugazi
+## Version: 3.0.0
+## SavedVariables: FugaziBAGSDB, FugaziBAGS_AddonEnabled
+## DefaultState: enabled
+## LoadOnDemand: 0
+## LoadWith: Blizzard_Bags
+
+# Locales (enUS first; optional community locales before Locale.lua)
+Locales\enUS.lua
+Locales\Locale.lua
+
+Modules\Helpers\FugaziBAGS_Formatting.lua
+Modules\Helpers\FugaziBAGS_Tooltips.lua
+Modules\FugaziBAGS_Utils.lua
+Modules\FugaziBAGS_Search.lua
+Modules\skins.lua
+Modules\FugaziBAGS_Config.lua
+FugaziBAGS_Initialize.lua
+Modules\FugaziBAGS_Pools.lua
+Modules\FugaziBAGS_Render.lua
+Modules\FugaziBAGS_Frames.lua
+Modules\FugaziBAGS_Listview.lua
+Modules\FugaziBAGS_GPH.lua
+Modules\FugaziBAGS_SecurePathsHandler.lua
+
+Modules\FugaziBAGS_AutoSell.lua
+Modules\FugaziBAGS_Protection.lua
+Modules\FugaziBAGS_Sort.lua
+Modules\FugaziBAGS_Bankview.lua
+Modules\FugaziBAGS_Opener.lua
+Modules\FugaziBAGS_Destroyer.lua
+Modules\FugaziBAGS_DestroyData.lua
+Modules\FugaziBAGS_Gridview.lua
+Modules\FugaziBAGS_Actions.lua
+Modules\FugaziBAGS_Notepad.lua
+Modules\FugaziBAGS_Mail.lua
+Modules\FugaziBAGS_Tweaks.lua
+Modules\FugaziBAGS_Options.lua
+FugaziBAGS_Core.lua

@@ -1,0 +1,1048 @@
+local addonName, Addon = ...
+local A = _G.FugaziBAGS or Addon or {}
+_G.FugaziBAGS = A
+
+local SKIN = {
+    -- Bagnon-inspired unified panel (replaces the old gold DialogBox "Original").
+    -- Same architecture as Bagnon: single free-resize window + tooltip chrome, not stock multi-bag art.
+    -- SV key stays "original" for saved-var compatibility; UI label is "Bagnon".
+    original = {
+        mainBackdrop = {
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile     = true, tileSize = 16, edgeSize = 16,
+            insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+        },
+        -- Bagnon-ish panel: black ~75% fill (not 50%), white border
+        mainBg = { 0, 0, 0, 0.75 },
+        mainBorder = { 1, 1, 1, 1 },
+        titleBackdrop = {
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = nil, tile = true, tileSize = 16, edgeSize = 0,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        },
+        titleBg = { 0.04, 0.04, 0.05, 0.72 },
+        btnNormal = { 0.14, 0.14, 0.16, 0.90 },
+        titleTextColor = { 1.0, 0.82, 0.0, 1 }, -- GameFontNormal gold (classic Bagnon title)
+        searchBtnBg = { 0.12, 0.12, 0.14, 0.90 },
+        searchBtnHover = { 0.24, 0.24, 0.28, 0.95 },
+        scaleBtnDim = { 0.12, 0.12, 0.14, 0.90 },
+        scaleBtnBright = { 0.28, 0.28, 0.32, 0.95 },
+        collapseBtnDim = { 0.12, 0.12, 0.14, 0.90 },
+        collapseBtnBright = { 0.28, 0.28, 0.32, 0.95 },
+        statusTextColor = { 0.92, 0.92, 0.92, 1 },
+        bottomBarBg = { 0, 0, 0, 0.70 },
+        bottomBarBorder = { 0.85, 0.85, 0.85, 0.45 },
+        bottomBarTextColor = { 0.92, 0.92, 0.92, 1 },
+        sepColor = { 1, 1, 1, 0.12 },
+        bagSpaceGlow = { 1, 1, 1, 0.35 },
+        -- Bagnon item slots: dark pad + UI-Quickslot2 ring (rounded depth) + classic empty art.
+        -- Matches BagBrother: empty icon = UI-Backpack-EmptySlot, border = Quickslot2.
+        slotAlpha = 1,
+        slotBgStyle = "bagnon",
+        slotBgTexture = "Interface\\Buttons\\UI-Quickslot2",
+        slotBgColor = { 1, 1, 1, 0.95 },
+        slotBgScale = 1.55, -- classic ~64px ring on ~37px button
+        slotInnerColor = { 0.04, 0.04, 0.06, 0.55 },
+        slotEmptyTexture = "Interface\\PaperDoll\\UI-Backpack-EmptySlot",
+        slotIconInset = 2,
+        dividerAlpha = 0.28,
+        iconTint = { 1, 1, 1, 1 },
+        -- List-row idle fill on clickArea: glassy wash. Final alpha *= gphItemDetailsAlpha (Row opacity slider).
+        rowBg = { 0.55, 0.55, 0.60, 0.07 },
+    },
+    elvui = {
+        mainBackdrop = {
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            tile     = true, tileSize = 16, edgeSize = 1,
+            insets   = { left = 0, right = 0, top = 0, bottom = 0 },
+        },
+        mainBg = { 0.1, 0.1, 0.1, 1 },
+        mainBorder = { 0.2, 0.2, 0.2, 1 },
+        titleBackdrop = { bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = nil, tile = true, tileSize = 16, edgeSize = 0, insets = { left = 0, right = 0, top = 0, bottom = 0 } },
+        titleBg = { 0.157, 0.239, 0.239, 0.95 },
+        -- Ebonhold-style: teal/green buttons (not shared with ElvUI grey).
+        btnNormal = { 0.1, 0.3, 0.15, 0.7 },
+        titleTextColor = { 0.6, 0.85, 0.85, 1 },
+        searchBtnBg = { 0.1, 0.3, 0.15, 0.7 },
+        searchBtnHover = { 0.15, 0.4, 0.2, 0.8 },
+        scaleBtnDim = { 0.1, 0.3, 0.15, 0.7 },
+        scaleBtnBright = { 0.15, 0.4, 0.2, 0.8 },
+        collapseBtnDim = { 0.1, 0.3, 0.15, 0.7 },
+        collapseBtnBright = { 0.15, 0.4, 0.2, 0.8 },
+        statusTextColor = { 0.6, 0.85, 0.85, 1 },
+        bottomBarBg = { 0.08, 0.1, 0.12, 0.95 },
+        bottomBarBorder = { 0.18, 0.31, 0.31, 0.6 },
+        bottomBarTextColor = { 0.6, 0.85, 0.85, 1 },
+        sepColor = { 0.18, 0.31, 0.31, 0.4 },
+        bagSpaceGlow = { 0.2, 0.5, 0.5, 0.5 },
+        -- Registry Expansion:
+        slotAlpha = 0.90,
+        slotBgTexture = "Interface\\Tooltips\\UI-Tooltip-Background",
+        slotBgColor = { 0.06, 0.08, 0.09, 0.90 },
+        dividerAlpha = 0.4,
+        iconTint = { 1, 1, 1, 1 },
+        rowBg = { 0.40, 0.60, 0.50, 0.08 },
+    },
+    elvui_real = {
+        mainBackdrop = {
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            tile     = true, tileSize = 16, edgeSize = 1,
+            insets   = { left = 0, right = 0, top = 0, bottom = 0 },
+        },
+        mainBg = { 0.04, 0.04, 0.04, 1 },
+        mainBorder = { 0.10, 0.10, 0.10, 1 },
+        titleBackdrop = { bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = nil, tile = true, tileSize = 16, edgeSize = 0, insets = { left = 0, right = 0, top = 0, bottom = 0 } },
+        titleBg = { 0.08, 0.08, 0.08, 1 },
+        btnNormal = { 0.18, 0.18, 0.18, 0.9 },
+        titleTextColor = { 0.9, 0.9, 0.9, 1 },
+        searchBtnBg = { 0.18, 0.18, 0.18, 0.9 },
+        searchBtnHover = { 0.26, 0.26, 0.26, 0.95 },
+        scaleBtnDim = { 0.18, 0.18, 0.18, 0.9 },
+        scaleBtnBright = { 0.30, 0.30, 0.30, 0.95 },
+        collapseBtnDim = { 0.18, 0.18, 0.18, 0.9 },
+        collapseBtnBright = { 0.30, 0.30, 0.30, 0.95 },
+        statusTextColor = { 0.8, 0.8, 0.8, 1 },
+        bottomBarBg = { 0.03, 0.03, 0.03, 0.98 },
+        bottomBarBorder = { 0.10, 0.10, 0.10, 1 },
+        bottomBarTextColor = { 0.8, 0.8, 0.8, 1 },
+        sepColor = { 0.25, 0.25, 0.25, 0.5 },
+        bagSpaceGlow = { 0.5, 0.5, 0.5, 0.5 },
+        -- Registry Expansion:
+        slotAlpha = 0.90,
+        slotBgTexture = "Interface\\Tooltips\\UI-Tooltip-Background",
+        slotBgColor = { 0.06, 0.08, 0.09, 0.90 },
+        dividerAlpha = 0.5,
+        iconTint = { 1, 1, 1, 1 },
+        rowBg = { 0.70, 0.70, 0.72, 0.06 },
+    },
+    pimp_purple = {
+        mainBackdrop = {
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            tile     = true, tileSize = 16, edgeSize = 1,
+            insets   = { left = 0, right = 0, top = 0, bottom = 0 },
+        },
+        mainBg = { 0.30, 0.00, 0.50, 0.58 },
+        mainBorder = { 0.75, 0.40, 0.95, 1 },
+        titleBackdrop = { bgFile = "Interface\\AddOns\\__FugaziBAGS\\media\\Leopard", edgeFile = nil, tile = true, tileSize = 256, edgeSize = 0, insets = { left = 0, right = 0, top = 0, bottom = 0 } },
+        titleBg = { 1, 1, 1, 0.72 },
+        btnNormal = { 0.65, 0.45, 0.15, 0.95 },
+        titleTextColor = { 1.0, 0.90, 1.0, 1 },
+        searchBtnBg = { 0.40, 0.12, 0.60, 0.92 },
+        searchBtnHover = { 0.52, 0.20, 0.78, 0.96 },
+        scaleBtnDim = { 0.65, 0.45, 0.15, 0.95 },
+        scaleBtnBright = { 0.78, 0.58, 0.22, 1 },
+        collapseBtnDim = { 0.65, 0.45, 0.15, 0.95 },
+        collapseBtnBright = { 0.78, 0.58, 0.22, 1 },
+        btnHoverGold = { 0.78, 0.58, 0.22, 1 },
+        statusTextColor = { 0.95, 0.85, 1.0, 1 },
+        bottomBarBg = { 0.36, 0.26, 0.11, 0.85 },
+        bottomBarBorder = { 0.62, 0.45, 0.20, 1 },
+        bottomBarTextColor = { 1.0, 0.90, 0.9, 1 },
+        sepColor = { 0.70, 0.50, 0.90, 0.5 },
+        bagSpaceGlow = { 0.85, 0.50, 0.95, 0.6 },
+        -- Registry Expansion:
+        slotAlpha = 0.85,
+        slotBgTexture = "Interface\\Tooltips\\UI-Tooltip-Background",
+        slotBgColor = { 0.20, 0.02, 0.32, 0.85 },
+        dividerAlpha = 0.5,
+        iconTint = { 1, 1, 1, 1 },
+        rowBg = { 0.75, 0.45, 0.95, 0.07 },
+    },
+    -- "FUGAZI" skin: based on elvui_real plus your current overrides from gphSkinOverrides.
+    fugazi = {
+        mainBackdrop = {
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            tile     = true, tileSize = 16, edgeSize = 1,
+            insets   = { left = 0, right = 0, top = 0, bottom = 0 },
+        },
+        -- From your gphSkinOverrides.mainBg
+        mainBg = { 0.10, 0.07, 0.05, 1 },
+        mainBorder = { 0.15, 0.12, 0.10, 1 },
+        -- Header: washed, scruffy look – custom suede texture tinted dark so it’s unique, not flat ElvUI
+        titleBackdrop = { bgFile = "Interface\\AddOns\\__FugaziBAGS\\media\\Suede", edgeFile = nil, tile = true, tileSize = 128, edgeSize = 0, insets = { left = 0, right = 0, top = 0, bottom = 0 } },
+        titleBg = { 0.14, 0.11, 0.09, 0.88 },
+        btnNormal = { 0.18, 0.18, 0.18, 0.9 },
+        -- Use your warm header text colour from gphSkinOverrides.headerTextColor
+        titleTextColor = { 1.0, 0.85, 0.65, 1 },
+        searchBtnBg = { 0.18, 0.18, 0.18, 0.9 },
+        searchBtnHover = { 0.26, 0.26, 0.26, 0.95 },
+        scaleBtnDim = { 0.18, 0.18, 0.18, 0.9 },
+        scaleBtnBright = { 0.30, 0.30, 0.30, 0.95 },
+        collapseBtnDim = { 0.18, 0.18, 0.18, 0.9 },
+        collapseBtnBright = { 0.30, 0.30, 0.30, 0.95 },
+        statusTextColor = { 1.0, 0.81, 0.58, 1 },
+        bottomBarBg = { 0.03, 0.03, 0.03, 0.98 },
+        bottomBarBorder = { 0.10, 0.10, 0.10, 1 },
+        bottomBarTextColor = { 1.0, 0.81, 0.58, 1 },
+        sepColor = { 0.25, 0.25, 0.25, 0.5 },
+        bagSpaceGlow = { 0.5, 0.5, 0.5, 0.5 },
+        -- Registry Expansion:
+        slotAlpha = 0.25,
+        slotBgTexture = "Interface\\Buttons\\UI-Quickslot2",
+        slotBgColor = { 1, 1, 1, 0.25 },
+        slotBgTexCoord = { 0.08, 0.92, 0.08, 0.92 },
+        dividerAlpha = 0.5,
+        iconTint = { 1, 1, 1, 1 },
+        rowBg = { 0.75, 0.60, 0.45, 0.06 },
+    },
+}
+
+local GPH_CLASS_COLORS = {
+    WARRIOR  = { 0.78, 0.61, 0.43 },
+    PALADIN  = { 0.96, 0.55, 0.73 },
+    HUNTER   = { 0.67, 0.83, 0.45 },
+    ROGUE    = { 1.0,  0.96, 0.41 },
+    PRIEST   = { 1.0,  1.0,  1.0  },
+    DEATHKNIGHT = { 0.77, 0.12, 0.23 },
+    SHAMAN   = { 0.0,  0.44, 0.87 },
+    MAGE     = { 0.41, 0.8,  0.94 },
+    WARLOCK  = { 0.58, 0.51, 0.79 },
+    DRUID    = { 1.0,  0.49, 0.04 },
+}
+
+local function GetGphPlayerNameTitleAndColor()
+    local name = (UnitName and UnitName("player")) or "Player"
+    if not name or name == "" then name = "Player" end
+    local _, class = UnitClass and UnitClass("player")
+    local darken = 0.68
+    local r, g, b = 0.65, 0.6, 0.5
+    if class and GPH_CLASS_COLORS[class] then
+        local c = GPH_CLASS_COLORS[class]
+        r = (c[1] or 0.5) * darken
+        g = (c[2] or 0.5) * darken
+        b = (c[3] or 0.5) * darken
+    end
+    return name, r, g, b
+end
+
+-- Forward decl: ApplyToComponent is defined later in this file; without this, the call
+-- below resolves as a nil global and hard-errors on login (Lua locals are not hoisted).
+local ApplyToComponent
+
+local function ApplyGphInventoryTitle(fs)
+    if not fs then return end
+    local name = GetGphPlayerNameTitleAndColor()
+    fs:SetText(name)
+    -- Skin path sets headerTextColor + header font size. Never leave darkened class color
+    -- as the final paint (old A.ApplyToComponent was nil; Phase 5 L3 skin=skip kept grey).
+    if ApplyToComponent then
+        ApplyToComponent(fs, "Text", "Title")
+    end
+end
+
+local function ResolveSkinName()
+    local SV = _G.FugaziBAGSDB
+    local val = SV and SV.gphSkin or "elvui_real"
+    -- Must list every SKIN key; unknown values fall back to default ElvUI.
+    -- (Bug: "original" used to fall through here and always painted as elvui_real.)
+    if val == "original" then return "original" end
+    if val == "fugazi" then return "fugazi" end
+    if val == "elvui_real" then return "elvui_real" end
+    if val == "elvui" then return "elvui" end
+    if val == "pimp_purple" then return "pimp_purple" end
+    if SKIN[val] then return val end
+    return "elvui_real"
+end
+
+--- Hide leftover BankFrame quadrant textures from the failed classic-panel experiment.
+local function HideBankPanelArt(frame)
+    local art = frame and frame._bankPanelArt
+    if not art then return end
+    for _, t in pairs(art) do
+        if t and t.Hide then t:Hide() end
+    end
+end
+
+--- Adds a 1px border around a button using the given color (used for Search, bag space, and bank bag space so they match).
+local function AddBorder(btn, color)
+    if not btn then return end
+    if not btn._borderTop then
+        local t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetHeight(1); t:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0); t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+        btn._borderTop = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetHeight(1); t:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0); t:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+        btn._borderBottom = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetWidth(1); t:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0); t:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+        btn._borderLeft = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetWidth(1); t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0); t:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+        btn._borderRight = t
+    end
+    local r, g, b, a = unpack(color or {1,1,1,1})
+    local br, bg, bb = r * 1.5, g * 1.5, b * 1.5
+    if br > 1 then br = 1 end; if bg > 1 then bg = 1 end; if bb > 1 then bb = 1 end
+    btn._borderTop:SetVertexColor(br, bg, bb, 0.8)
+    btn._borderBottom:SetVertexColor(br, bg, bb, 0.8)
+    btn._borderLeft:SetVertexColor(br, bg, bb, 0.8)
+    btn._borderRight:SetVertexColor(br, bg, bb, 0.8)
+end
+
+-- Shared Skinning Helpers
+local function ResolveColor(key, allOverrides, defaultTbl)
+    local ov = allOverrides[key]
+    if ov and type(ov) == "table" and #ov >= 3 then
+        return ov[1], ov[2], ov[3], ov[4] or 1
+    end
+    if defaultTbl then return unpack(defaultTbl) end
+    return 1, 1, 1, 1
+end
+
+local function SetSkinButton(btn, sType)
+    if btn and _G.__FugaziBAGS_Skins and _G.__FugaziBAGS_Skins.ApplyToComponent then
+        _G.__FugaziBAGS_Skins.ApplyToComponent(btn, "Button", sType)
+    end
+end
+
+--- Border for Bagnon/original-skin rarity buttons: when edgeFile/edgeSize given, uses same textured border as main frame; else 2px solid.
+--- For the textured border we draw it on a separate frame 2px larger than the button, behind the button (lower frame level),
+--- so the button's highlight/click effects don't overlap the border and cause distortion.
+local function AddRarityBorder(btn, borderColor, edgeFile, edgeSize)
+    if not btn then return end
+    if edgeFile and edgeSize then
+        -- Don't put backdrop on the button; use a sibling frame so border sits outside and behind.
+        if not btn._rarityBorderFrame then
+            local parent = btn:GetParent()
+            if not parent then return end
+            local bf = CreateFrame("Frame", nil, parent)
+            bf:SetFrameStrata(btn:GetFrameStrata() or "MEDIUM")
+            -- Draw the rarity border slightly ABOVE the button so it isn't hidden behind
+            -- the button background, but still separate from the button's own highlight.
+            bf:SetFrameLevel((btn:GetFrameLevel() or 1) + 1)
+            bf:EnableMouse(false)
+            btn._rarityBorderFrame = bf
+        end
+        local bf = btn._rarityBorderFrame
+        bf:ClearAllPoints()
+        bf:SetPoint("TOPLEFT", btn, "TOPLEFT", -2, 2)
+        bf:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 2, -2)
+        bf:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = edgeFile,
+            tile = true,
+            tileSize = 16,
+            edgeSize = edgeSize,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        })
+        bf:SetBackdropColor(0, 0, 0, 0)
+        bf:SetBackdropBorderColor(unpack(borderColor or {0.6, 0.5, 0.2, 0.8}))
+        bf:Show()
+        if btn._rarityBorderTop then btn._rarityBorderTop:Hide() end
+        if btn._rarityBorderBottom then btn._rarityBorderBottom:Hide() end
+        if btn._rarityBorderLeft then btn._rarityBorderLeft:Hide() end
+        if btn._rarityBorderRight then btn._rarityBorderRight:Hide() end
+        return
+    end
+    -- When switching away from textured border, hide the outer frame so it doesn't linger.
+    if btn._rarityBorderFrame then
+        btn._rarityBorderFrame:Hide()
+        btn._rarityBorderFrame:SetBackdrop(nil)
+    end
+    local w = 2
+    if not btn._rarityBorderTop then
+        local t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetHeight(w); t:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0); t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+        btn._rarityBorderTop = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetHeight(w); t:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0); t:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+        btn._rarityBorderBottom = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetWidth(w); t:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0); t:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+        btn._rarityBorderLeft = t
+        t = btn:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        t:SetWidth(w); t:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0); t:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+        btn._rarityBorderRight = t
+    end
+    local r, g, b, a = unpack(borderColor or {0.6, 0.5, 0.2, 0.8})
+    btn._rarityBorderTop:SetVertexColor(r, g, b, a)
+    btn._rarityBorderBottom:SetVertexColor(r, g, b, a)
+    btn._rarityBorderLeft:SetVertexColor(r, g, b, a)
+    btn._rarityBorderRight:SetVertexColor(r, g, b, a)
+end
+
+--- Central API to apply skinning properties to a component.
+--- @param frame table The UI object (Button, Frame, FontString, etc)
+--- @param compType string "Header" | "Button" | "Slot" | "Divider" | "Main" | "Text"
+--- @param subType string? Optional sub-variant (e.g. "Category", "Search", "Status")
+--- @param context string? Additional context (e.g. "Delete")
+ApplyToComponent = function(frame, compType, subType, context)
+    if not frame then return end
+    local skinName = ResolveSkinName()
+    local s = SKIN[skinName]
+    if not s then return end
+
+    local SV = _G.FugaziBAGSDB
+    local allOverrides = (SV and SV.gphSkinOverrides) or {}
+    
+    local function color(key, defaultTbl)
+        return ResolveColor(key, allOverrides, defaultTbl)
+    end
+
+    if compType == "Main" then
+        local fa = (SV and SV.gphFrameAlpha) or 1
+        if fa > 0.99 then fa = 1 end
+        frame:SetBackdrop(s.mainBackdrop)
+        local r, g, b, a = color("mainBg", s.mainBg)
+        frame:SetBackdropColor(r, g, b, (a or 1) * fa)
+        local br, bg, bb, ba = color("mainBorder", s.mainBorder)
+        frame:SetBackdropBorderColor(br, bg, bb, (ba or 1) * fa)
+
+        -- Always kill failed classic experiments (BankFrame panels / solid underlay).
+        if frame._classicSolidBg then frame._classicSolidBg:Hide() end
+        HideBankPanelArt(frame)
+
+        -- Special Pimp Purple background texture
+        if skinName == "pimp_purple" then
+            if not frame._pimpSuedeTex then
+                local tex = frame:CreateTexture(nil, "BACKGROUND")
+                tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+                tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+                tex:SetTexture("Interface\\AddOns\\__FugaziBAGS\\media\\Suede")
+                tex:SetAlpha(0.72 * fa)
+                frame._pimpSuedeTex = tex
+            end
+            frame._pimpSuedeTex:SetAlpha(0.72 * fa)
+            frame._pimpSuedeTex:Show()
+        else
+            if frame._pimpSuedeTex then frame._pimpSuedeTex:Hide() end
+        end
+
+    elseif compType == "Header" then
+        frame:SetBackdrop(s.titleBackdrop)
+        local r, g, b, a = color("titleBg", s.titleBg)
+        frame:SetBackdropColor(r, g, b, a)
+
+    elseif compType == "Button" then
+        local bg = frame.bg or (frame.GetName and _G[frame:GetName().."bg"])
+        if bg then
+            local c = s.btnNormal
+            if subType == "Search" or subType == "BagSpace" then
+                local titleBgFile = (s.titleBackdrop and s.titleBackdrop.bgFile) or "Interface\\Tooltips\\UI-Tooltip-Background"
+                bg:SetTexture(titleBgFile)
+                c = s.titleBg
+            else
+                bg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+            end
+            
+            if c then
+                bg:SetVertexColor(unpack(c))
+                AddBorder(frame, c)
+            end
+        end
+        -- Fallback: if no .bg, try to set backdrop if it's a frame
+        if not bg and frame.SetBackdrop then
+            frame:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = nil })
+            local c = (subType == "Search") and s.titleBg or s.btnNormal
+            if c then frame:SetBackdropColor(unpack(c)) end
+        end
+
+        -- Set metadata for hover logic
+        frame.gphBtnNormal = (subType == "Search") and s.searchBtnBg or (subType == "Rarity" and s.bgFile or s.btnNormal)
+        frame.gphBtnHover  = (subType == "Search") and s.searchBtnHover or (subType == "BagSpace" and s.searchBtnHover or (s.btnHoverHighlight or s.searchBtnHover))
+
+        -- Rarity buttons: match main-frame border chrome (Bagnon/original skin only)
+        if subType == "Rarity" then
+            if skinName == "original" then
+                local bc = s.mainBorder or { 1, 1, 1, 0.9 }
+                local edge = (s.mainBackdrop and s.mainBackdrop.edgeFile) or "Interface\\Tooltips\\UI-Tooltip-Border"
+                local es = (s.mainBackdrop and s.mainBackdrop.edgeSize) or 16
+                AddRarityBorder(frame, bc, edge, math.min(12, es))
+            else
+                if frame._rarityBorderFrame then frame._rarityBorderFrame:Hide() end
+            end
+        end
+
+    elseif compType == "Slot" then
+        local bg = frame.slotBg
+        if bg then
+            if s.slotBgStyle == "bagnon" then
+                -- Dark inner pad (gives the "socket" body under the ring).
+                if not frame._slotInner then
+                    frame._slotInner = frame:CreateTexture(nil, "BACKGROUND", nil, -2)
+                end
+                local inner = frame._slotInner
+                local inset = s.slotIconInset or 2
+                inner:ClearAllPoints()
+                inner:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+                inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+                inner:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+                local ir, ig, ib, ia = unpack(s.slotInnerColor or { 0.04, 0.04, 0.06, 0.55 })
+                inner:SetVertexColor(ir, ig, ib, ia or 0.55)
+                inner:Show()
+
+                -- Classic Quickslot2 ring: slightly larger than the button for rounded depth
+                -- (same idea as Blizzard ItemButton NormalTexture 64px on 37px).
+                bg:ClearAllPoints()
+                local bw = frame:GetWidth() or 37
+                local bh = frame:GetHeight() or 37
+                if bw < 8 then bw = 37 end
+                if bh < 8 then bh = 37 end
+                local scale = s.slotBgScale or 1.55
+                bg:SetSize(bw * scale, bh * scale)
+                bg:SetPoint("CENTER", frame, "CENTER", 0, 0)
+                bg:SetTexture(s.slotBgTexture or "Interface\\Buttons\\UI-Quickslot2")
+                bg:SetTexCoord(0, 1, 0, 1)
+                local r, g, b, a = unpack(s.slotBgColor or { 1, 1, 1, 0.95 })
+                bg:SetVertexColor(r, g, b, a or 0.95)
+                bg:Show()
+                frame._slotBagnonRing = true
+            else
+                if frame._slotInner then frame._slotInner:Hide() end
+                frame._slotBagnonRing = nil
+                bg:ClearAllPoints()
+                bg:SetAllPoints(frame)
+                bg:SetTexture(s.slotBgTexture)
+                local r, g, b, a = unpack(s.slotBgColor)
+                bg:SetVertexColor(r, g, b, a)
+                local tc = s.slotBgTexCoord
+                if tc then
+                    bg:SetTexCoord(tc[1], tc[2], tc[3], tc[4])
+                else
+                    bg:SetTexCoord(0, 1, 0, 1)
+                end
+            end
+        end
+        if frame.icon then
+            local tint = s.iconTint
+            if tint then frame.icon:SetVertexColor(unpack(tint)) end
+            -- Bagnon slots inset the icon so the Quickslot ring can read as a border.
+            if s.slotBgStyle == "bagnon" then
+                local inset = s.slotIconInset or 2
+                frame.icon:ClearAllPoints()
+                frame.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+                frame.icon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+            end
+        end
+
+    elseif compType == "Divider" then
+        if context == "Delete" then
+            frame:SetTexture(0.32, 0.14, 0.14) -- Dark red for delete
+            frame:SetAlpha(0.65)
+        else
+            local r, g, b, a = color("sepColor", s.sepColor)
+            frame:SetTexture(r, g, b)
+            local alpha = s.dividerAlpha or a or 1
+            frame:SetAlpha(alpha)
+        end
+
+    elseif compType == "Text" then
+        local c = s.statusTextColor
+        if subType == "Title" then
+            c = s.titleTextColor
+        elseif subType == "BottomBar" then
+            c = s.bottomBarTextColor
+        end
+        
+        -- Override specific check: Always apply if set, no matter the custom-font toggle
+        if subType == "Title" or subType == "Header" or subType == "Search" or subType == "BagSpace" then
+            local r, g, b, a = color("headerTextColor", s.titleTextColor)
+            if context == "Delete" then 
+                -- Autodelete header should ALWAYS be dark red, ignoring customization.
+                r, g, b = 0.65, 0.22, 0.22 
+                a = a * 0.7 -- Slightly clearer than the default 0.45 wash
+            end
+            frame:SetTextColor(r, g, b, a)
+
+            -- Apply Header Font
+            if A.GetCategoryHeaderFontAndSize then
+                local path, size = A.GetCategoryHeaderFontAndSize()
+                if subType == "BagSpace" then 
+                    size = math.min(12, math.max(6, size - 1))
+                elseif subType == "Search" then
+                    size = math.min(13, math.max(6, size - 1))
+                elseif subType == "Title" then
+                    size = size + 1
+                end
+                frame:SetFont(path, size, "")
+            elseif SV and SV.gphCategoryHeaderFontCustom and SV.gphCategoryHeaderFont and SV.gphCategoryHeaderFont ~= "" then
+                local path = SV.gphCategoryHeaderFont
+                local size = SV.gphCategoryHeaderFontSize or 11
+                if subType == "BagSpace" then 
+                    size = math.min(12, math.max(6, size - 1))
+                elseif subType == "Search" then
+                    size = math.min(13, math.max(6, size - 1))
+                elseif subType == "Title" then 
+                    size = size + 1 
+                end
+                frame:SetFont(path, size, "")
+            end
+
+            -- Fugazi Aesthetic: Washed/Worn look for headers
+            if skinName == "fugazi" and not (SV and SV.gphCategoryHeaderFontCustom) then
+                frame:SetAlpha(0.85) -- Subtle wash for the thematic feel
+            end
+        elseif c then
+            frame:SetTextColor(unpack(c))
+        end
+    elseif compType == "Row" then
+        -- Paint on clickArea: parent BACKGROUND is under the full-size Button and often invisible.
+        -- 1px bottom inset = panel peeks through between flush-stacked rows.
+        local host = frame.clickArea or frame
+        if not frame.bg then
+            local bg = host:CreateTexture(nil, "BACKGROUND")
+            frame.bg = bg
+        elseif frame.bg.GetParent and frame.bg:GetParent() ~= host and frame.bg.SetParent then
+            -- Migrate legacy parent-frame fill onto clickArea so it actually paints.
+            frame.bg:SetParent(host)
+        end
+        frame.bg:ClearAllPoints()
+        frame.bg:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        frame.bg:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 1)
+        if subType == "Item" then
+            local c = s.rowBg
+            if not c then
+                -- Fallback glassy wash: light tint at low alpha over the panel.
+                c = { 0.70, 0.70, 0.72, 0.07 }
+            end
+            -- Skins > Row opacity slider (gphItemDetailsAlpha): 0 = no wash, 1 = full glass hint.
+            local slider = 1
+            if SV and SV.gphItemDetailsAlpha ~= nil then
+                slider = tonumber(SV.gphItemDetailsAlpha) or 1
+            end
+            if slider < 0 then slider = 0 elseif slider > 1 then slider = 1 end
+            local baseA = c[4] or 0.07
+            local a = baseA * slider
+            -- Color rect with alpha in the texture (glassy hint). Slider scales the wash.
+            frame.bg:SetTexture(c[1] or 0.7, c[2] or 0.7, c[3] or 0.72, a)
+            frame.bg:SetAlpha(1)
+            if a <= 0.001 then
+                frame.bg:Hide()
+            else
+                frame.bg:Show()
+            end
+            if frame.rowHighlight then
+                local hr, hg, hb = 1, 1, 1
+                if s.btnNormal then hr, hg, hb = s.btnNormal[1], s.btnNormal[2], s.btnNormal[3] end
+                frame.rowHighlight:SetVertexColor(hr, hg, hb, 0.14 + 0.08 * slider)
+            end
+        end
+    end
+
+    -- Special BagSpace components (glow)
+    if subType == "BagSpace" and frame.glow then
+        local gc = s.bagSpaceGlow or { 1, 0.85, 0.2, 0.5 }
+        frame.glow:SetVertexColor(unpack(gc))
+    end
+end
+
+local function SkinScrollBar(self)
+    if not self then return end
+    local name = self:GetName()
+    if not name then return end
+
+    local scrollbar = _G[name.."ScrollBar"]
+    if not scrollbar then return end
+
+    -- Aggressively hide standard Blizzard buttons (up/down arrows)
+    local up = _G[name.."ScrollBarScrollUpButton"]
+    local down = _G[name.."ScrollBarScrollDownButton"]
+    if up then 
+        up:Hide(); up:SetAlpha(0); up:EnableMouse(false) 
+        if up:GetNormalTexture() then up:GetNormalTexture():SetTexture(nil) end
+        if up:GetPushedTexture() then up:GetPushedTexture():SetTexture(nil) end
+    end
+    if down then 
+        down:Hide(); down:SetAlpha(0); down:EnableMouse(false) 
+        if down:GetNormalTexture() then down:GetNormalTexture():SetTexture(nil) end
+        if down:GetPushedTexture() then down:GetPushedTexture():SetTexture(nil) end
+    end
+
+    -- Clear all legacy textures from the scrollbar frame itself
+    for i = 1, scrollbar:GetNumRegions() do
+        local region = select(i, scrollbar:GetRegions())
+        if region:GetObjectType() == "Texture" then
+            region:SetTexture(nil)
+        end
+    end
+
+    -- Add flat vertical rail (the groove)
+    if not scrollbar.bg then
+        local bg = scrollbar:CreateTexture(nil, "BACKGROUND")
+        bg:SetPoint("TOPLEFT", scrollbar, "TOPLEFT", 0, 0)
+        bg:SetPoint("BOTTOMRIGHT", scrollbar, "BOTTOMRIGHT", 0, 0)
+        bg:SetTexture(0, 0, 0, 0) -- Set to 0 alpha to remove weird dark backdrop
+        scrollbar.bg = bg
+    end
+
+    -- Add sleek flat thumb
+    local thumb = scrollbar:GetThumbTexture()
+    if thumb then
+        thumb:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        thumb:SetWidth(12)
+        -- Color it dynamically based on the header text color settings
+        local skinName = ResolveSkinName()
+        local s = SKIN[skinName]
+        local SV = _G.FugaziBAGSDB
+        local overrides = (SV and SV.gphSkinOverrides) or {}
+        local ov = overrides.headerTextColor
+
+        local r, g, b, a = 0.2, 0.6, 0.5, 0.8 -- Default fallback
+        if ov and type(ov) == "table" and #ov >= 3 then
+            r, g, b, a = ov[1], ov[2], ov[3], (ov[4] or 1) * 0.8
+        elseif s and s.titleTextColor then
+            local c = s.titleTextColor
+            r, g, b, a = c[1], c[2], c[3], (c[4] or 1) * 0.8
+        end
+        thumb:SetVertexColor(r, g, b, a)
+    end
+end
+
+local function ApplyGPHFrameSkin(f)
+    if not f then return end
+    local skinName = ResolveSkinName()
+    local s = SKIN[skinName]
+    if not s then return end
+
+    local SV = _G.FugaziBAGSDB
+    local allOverrides = (SV and SV.gphSkinOverrides) or {}
+    
+    local function color(key, defaultTbl)
+        return ResolveColor(key, allOverrides, defaultTbl)
+    end
+
+    -- Apply Main Frame Skin
+    ApplyToComponent(f, "Main")
+
+    -- Title Bar
+    if f.gphTitleBar then
+        ApplyToComponent(f.gphTitleBar, "Header")
+        if f.gphTitleBar._fugaziEpicOverlay then f.gphTitleBar._fugaziEpicOverlay:Hide() end
+    end
+
+    -- Title Text
+    if f.gphTitle then
+        ApplyGphInventoryTitle(f.gphTitle)
+        ApplyToComponent(f.gphTitle, "Text", "Title")
+        f.gphTitle:Show()
+    end
+
+    -- Standard Buttons
+    SetSkinButton(f.gphSortBtn)
+    SetSkinButton(f.gphScaleBtn)
+    SetSkinButton(f.gphInvBtn)
+    SetSkinButton(f.gphSummonBtn)
+
+    -- Profession buttons (Special case: Never have backgrounds)
+    local function clearProfBtn(btn)
+        if btn then
+            if btn.bg then btn.bg:SetTexture(nil); btn.bg:SetAlpha(0) end
+            if btn._borderTop then btn._borderTop:Hide() end
+            if btn._borderBottom then btn._borderBottom:Hide() end
+            if btn._borderLeft then btn._borderLeft:Hide() end
+            if btn._borderRight then btn._borderRight:Hide() end
+        end
+    end
+    clearProfBtn(f.gphDisenchantBtn)
+    clearProfBtn(f.gphProspectBtn)
+    clearProfBtn(f.gphMillingBtn)
+    clearProfBtn(f.gphOpenBtn)
+    clearProfBtn(f.gphMailBtn)
+
+    -- Sync global hover colors for legacy consumers
+    f.gphTitleBarBtnNormal = s.btnNormal
+    f.gphTitleBarBtnHover  = s.searchBtnHover
+    if skinName == "pimp_purple" then
+        f.gphTitleBarBtnNormal = { 0.65, 0.45, 0.15, 0.95 } -- goldTop
+        f.gphTitleBarBtnHover  = s.btnHoverGold or { 0.78, 0.58, 0.22, 1 }
+    end
+
+    -- Scale Button specifically needs brightness state
+    f.gphScaleBtnDim = s.scaleBtnDim or { 0.1, 0.3, 0.15, 0.7 }
+    f.gphScaleBtnBright = s.scaleBtnBright or { 0.15, 0.4, 0.2, 0.8 }
+    if f.gphScaleBtn and f.gphScaleBtn.bg then
+        local scale = (SV and SV.gphScale15) and f.gphScaleBtnDim or f.gphScaleBtnBright
+        if scale then f.gphScaleBtn.bg:SetTexture(unpack(scale)) end
+    end
+
+    -- Search Button
+    if f.gphSearchBtn then
+        SetSkinButton(f.gphSearchBtn, "Search")
+        f.gphSearchBtnNormal = s.titleBg
+        f.gphSearchBtnHover = s.searchBtnHover
+    end
+    if f.gphSearchLabel then ApplyToComponent(f.gphSearchLabel, "Text", "Search") end
+
+    -- Bag Space Button
+    if f.gphBagSpaceBtn then
+        SetSkinButton(f.gphBagSpaceBtn, "BagSpace")
+        if f.gphBagSpaceBtn.fs then ApplyToComponent(f.gphBagSpaceBtn.fs, "Text", "BagSpace") end
+    end
+
+    -- Legacy metadata for Rarity System
+    f._useOriginalRarityStyle = (skinName == "original")
+    f._originalTitleBg = (skinName == "original" and s.titleBg) and s.titleBg or nil
+    f._originalMainBorder = (skinName == "original" and s.mainBorder) and s.mainBorder or nil
+    local mb = (skinName == "original" and s.mainBackdrop) and s.mainBackdrop or nil
+    f._originalEdgeFile = (mb and mb.edgeFile) and mb.edgeFile or nil
+    f._originalEdgeSize = (mb and mb.edgeSize) and math.min(12, mb.edgeSize) or 8
+    f._gphHeaderBgFile = (s.titleBackdrop and s.titleBackdrop.bgFile) or "Interface\\Tooltips\\UI-Tooltip-Background"
+
+    -- Bottom Bar
+    if f.gphBottomBar then
+        local defaultBottomBackdrop = {
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 16, edgeSize = 8,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        }
+        -- Match Bagnon main-frame chrome (tooltip border, not DialogBox).
+        local bagnonBottomBackdrop = {
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        }
+        if skinName == "pimp_purple" then
+            if f._fugaziBottomLeopard then f._fugaziBottomLeopard:Hide() end
+            f.gphBottomBar:SetBackdrop(defaultBottomBackdrop)
+            if s.bottomBarBg then f.gphBottomBar:SetBackdropColor(unpack(s.bottomBarBg)) end
+            if s.bottomBarBorder then f.gphBottomBar:SetBackdropBorderColor(unpack(s.bottomBarBorder)) end
+            
+            if not f._pimpBottomLeopard then
+                local lb = f.gphBottomBar:CreateTexture(nil, "BACKGROUND")
+                lb:SetPoint("TOPLEFT", f.gphBottomBar, "TOPLEFT", 0, 0)
+                lb:SetPoint("BOTTOMRIGHT", f.gphBottomBar, "BOTTOMRIGHT", 0, 0)
+                lb:SetTexture("Interface\\AddOns\\__FugaziBAGS\\media\\Leopard")
+                lb:SetTexCoord(0, 1, 0.0, 20.0 / 256.0)
+                lb:SetAlpha(0.72)
+                f._pimpBottomLeopard = lb
+            else
+                f._pimpBottomLeopard:SetTexCoord(0, 1, 0.0, 20.0 / 256.0)
+                f._pimpBottomLeopard:Show()
+            end
+        elseif skinName == "fugazi" then
+            if f._pimpBottomLeopard then f._pimpBottomLeopard:Hide() end
+            f.gphBottomBar:SetBackdrop(s.titleBackdrop)
+            f.gphBottomBar:SetBackdropColor(unpack(s.titleBg))
+            if s.bottomBarBorder then f.gphBottomBar:SetBackdropBorderColor(unpack(s.bottomBarBorder)) end
+        elseif skinName == "original" then
+            if f._pimpBottomLeopard then f._pimpBottomLeopard:Hide() end
+            if f._fugaziBottomLeopard then f._fugaziBottomLeopard:Hide() end
+            f.gphBottomBar:SetBackdrop(bagnonBottomBackdrop)
+            if s.bottomBarBg then f.gphBottomBar:SetBackdropColor(unpack(s.bottomBarBg)) end
+            if s.bottomBarBorder then f.gphBottomBar:SetBackdropBorderColor(unpack(s.bottomBarBorder)) end
+        else
+            if f._pimpBottomLeopard then f._pimpBottomLeopard:Hide() end
+            if f._fugaziBottomLeopard then f._fugaziBottomLeopard:Hide() end
+            f.gphBottomBar:SetBackdrop(defaultBottomBackdrop)
+            if s.bottomBarBg then f.gphBottomBar:SetBackdropColor(unpack(s.bottomBarBg)) end
+            if s.bottomBarBorder then f.gphBottomBar:SetBackdropBorderColor(unpack(s.bottomBarBorder)) end
+        end
+        if f.gphBottomBar._fugaziEpicOverlay then f.gphBottomBar._fugaziEpicOverlay:Hide() end
+    end
+
+    -- Bottom Bar Texts
+    if s.bottomBarTextColor then
+        if f.gphBottomLeft then f.gphBottomLeft:SetTextColor(unpack(s.bottomBarTextColor)) end
+        if f.gphBottomCenter then f.gphBottomCenter:SetTextColor(unpack(s.bottomBarTextColor)) end
+        if f.gphBottomRight then f.gphBottomRight:SetTextColor(unpack(s.bottomBarTextColor)) end
+    end
+
+    -- Divider
+    if f.gphSep then
+        ApplyToComponent(f.gphSep, "Divider")
+    end
+
+    -- Status Text
+    if f.statusText then
+        ApplyToComponent(f.statusText, "Text", "Status")
+    end
+
+    do local r, g, b, a = color("headerTextColor", s.titleTextColor); f.gphAccentTextColor = { r, g, b, a } end
+    if f.updateToggle then f.updateToggle() end
+    -- Clean up the old layered background alpha system
+    if f._gphAlphaBg then
+        f._gphAlphaBg:Hide()
+        f._gphAlphaBg:SetAlpha(0)
+    end
+
+    -- Refresh scrollbar thumb coloration if it exists
+    if f.scrollFrame then
+        SkinScrollBar(f.scrollFrame)
+    end
+end
+
+local function ApplyBankFrameSkin(f)
+    if not f then return end
+    local skinName = ResolveSkinName()
+    local s = SKIN[skinName]
+    if not s then return end
+
+    local SV = _G.FugaziBAGSDB
+    local allOverrides = (SV and SV.gphSkinOverrides) or {}
+    
+    local function color(key, defaultTbl)
+        return ResolveColor(key, allOverrides, defaultTbl)
+    end
+
+    -- Apply Main Frame Skin
+    ApplyToComponent(f, "Main")
+
+    -- Title Bar
+    if f.titleBar then
+        ApplyToComponent(f.titleBar, "Header")
+    end
+
+    -- Title Text
+    if f.bankTitleText then
+        ApplyToComponent(f.bankTitleText, "Text", "Title")
+    end
+
+    -- Buttons
+    SetSkinButton(f.purchaseBtn)
+    SetSkinButton(f.toggleBtn)
+    SetSkinButton(f.bankSortBtn)
+
+    -- Divider
+    if f.sep then
+        ApplyToComponent(f.sep, "Divider")
+    end
+
+    -- Rarity Buttons (Bank)
+    if f.bankQualityButtons then
+        for q, btn in pairs(f.bankQualityButtons) do
+            ApplyToComponent(btn, "Button", "Rarity")
+        end
+    end
+
+    -- Bank Space Button
+    if f.bankSpaceBtn then
+        SetSkinButton(f.bankSpaceBtn, "BagSpace")
+        if f.bankSpaceBtn.fs then 
+            ApplyToComponent(f.bankSpaceBtn.fs, "Text", "BagSpace") 
+        end
+        do 
+            local r, g, b, a = color("headerTextColor", s.titleTextColor)
+            f.bankSpaceTextColor = { r, g, b, a }
+            f.gphAccentTextColor = { r, g, b, a }
+        end
+    end
+
+    -- Legacy metadata
+    f._useOriginalRarityStyle = (skinName == "original")
+    f._originalTitleBg = (skinName == "original" and s.titleBg) and s.titleBg or nil
+    f._gphHeaderBgFile = (s.titleBackdrop and s.titleBackdrop.bgFile) or "Interface\\Tooltips\\UI-Tooltip-Background"
+    f._originalMainBorder = (skinName == "original" and s.mainBorder) and s.mainBorder or nil
+    local mb = (skinName == "original" and s.mainBackdrop) and s.mainBackdrop or nil
+    f._originalEdgeFile = (mb and mb.edgeFile) and mb.edgeFile or nil
+    f._originalEdgeSize = (mb and mb.edgeSize) and math.min(12, mb.edgeSize) or 8
+
+    -- Button Hover metadata
+    f.bankBtnNormal = s.btnNormal
+    if skinName == "pimp_purple" then
+        f.bankBtnNormal = { 0, 0, 0, 0 }
+        f.bankBtnHover = { 0, 0, 0, 0 }
+    else
+        f.bankBtnHover = s.searchBtnHover or s.searchBtnBg
+    end
+
+    -- Refresh scrollbar thumb coloration if it exists
+    if f.scroll then
+        SkinScrollBar(f.scroll)
+    end
+end
+
+
+
+
+--- Full "FUGAZI" preset: when a user selects the FUGAZI skin, apply these DB options so they get
+--- the same look — fonts, font sizes, icon size, hide options, frame opacity, and all colors.
+function ApplyFugaziPreset()
+    local SV = _G.FugaziBAGSDB
+    if not SV then return end
+    local Set = (_G.FugaziBAGS and _G.FugaziBAGS.SetOption) or function(k, v)
+        SV[k] = v
+    end
+    Set("gphSkin", "fugazi")
+    -- Do NOT touch gphFrameAlpha — window opacity is a global Scale setting preference.
+    -- Header / category: font, size, enable customisation
+    Set("gphCategoryHeaderFontCustom", true)
+    Set("gphCategoryHeaderFont", "Interface\\AddOns\\__FugaziBAGS\\media\\Fonts\\AncientModernTales.ttf")
+    Set("gphCategoryHeaderFontSize", 12)
+    -- Row / item details: font (Eight Bit Dragon), font size 15, icon size, opacity 100%, enable customisation
+    Set("gphItemDetailsCustom", true)
+    Set("gphItemDetailsFont", "Interface\\AddOns\\__FugaziBAGS\\media\\Fonts\\EightBitDragon.ttf")
+    Set("gphItemDetailsFontSize", 15)
+    Set("gphItemDetailsIconSize", 14)
+    Set("gphItemDetailsAlpha", 1)
+    -- Visibility
+    Set("gphHideIconsInList", true)
+    Set("gphHideTopButtons", true)
+    Set("gphBankHideTopButtons", true)
+    -- Colors (header text, FIT row label, item icon tint, frame background)
+    Set("gphSkinOverrides", {
+        fitRowColor = { 1, 0.945, 0.89, 1 },
+        headerTextColor = { 1, 0.808, 0.584, 1 },
+        itemDetailsIconColor = { 0.965, 1, 0.953, 1 },
+        mainBg = { 0.082, 0.039, 0.004, 1 },
+    })
+end
+
+--- Bagnon skin preset (SV key remains "original"): header Morpheus 11, list rows FRIZQT, etc.
+function ApplyBagnonPreset()
+    local SV = _G.FugaziBAGSDB
+    if not SV then return end
+    local Set = (_G.FugaziBAGS and _G.FugaziBAGS.SetOption) or function(k, v)
+        SV[k] = v
+    end
+    Set("gphSkin", "original")
+    -- Do NOT touch gphFrameAlpha — window opacity is a global Scale setting preference.
+    -- Customize headers: Morpheus @ 11
+    Set("gphCategoryHeaderFontCustom", true)
+    Set("gphCategoryHeaderFont", "Fonts\\MORPHEUS.TTF")
+    Set("gphCategoryHeaderFontSize", 11)
+    -- Customize list rows: FRIZQT, icon 25, name 19, row opacity 0.95
+    Set("gphItemDetailsCustom", true)
+    Set("gphItemDetailsFont", "Fonts\\FRIZQT__.TTF")
+    Set("gphItemDetailsFontSize", 19)
+    Set("gphItemDetailsIconSize", 25)
+    Set("gphItemDetailsAlpha", 0.95)
+    -- Keep chrome visible (not FUGAZI hide-all)
+    Set("gphHideIconsInList", false)
+    Set("gphHideTopButtons", false)
+    Set("gphBankHideTopButtons", false)
+    -- Use skin mainBg (~75% black); clear color overrides
+    Set("gphSkinOverrides", {})
+    -- Bag-space fit code caches base size — force re-derive after preset.
+    if A.Inventory then A.Inventory._bagSpaceFontBase = nil end
+    if A.Bank then A.Bank._bagSpaceFontBase = nil end
+end
+
+--- Empty-slot artwork for the active skin (Bagnon uses UI-Backpack-EmptySlot).
+local function GetSlotEmptyTexture()
+    local s = SKIN[ResolveSkinName()]
+    return s and s.slotEmptyTexture or nil
+end
+
+-- Expose for FugaziBAGS.lua (AddBorder for Search/bag; AddRarityBorder for Bagnon/original-skin rarity buttons)
+_G.__FugaziBAGS_Skins = {
+    SKIN = SKIN,
+    ApplyGPHFrameSkin = ApplyGPHFrameSkin,
+    ApplyBankFrameSkin = ApplyBankFrameSkin,
+    ApplyGphInventoryTitle = ApplyGphInventoryTitle,
+    SkinScrollBar = SkinScrollBar,
+    AddBorder = AddBorder,
+    AddRarityBorder = AddRarityBorder,
+    ApplyFugaziPreset = ApplyFugaziPreset,
+    ApplyBagnonPreset = ApplyBagnonPreset,
+    ApplyToComponent = ApplyToComponent,
+    GetSlotEmptyTexture = GetSlotEmptyTexture,
+    ResolveSkinName = ResolveSkinName,
+}
+_G.ApplyFugaziPreset = ApplyFugaziPreset
+_G.ApplyBagnonPreset = ApplyBagnonPreset
+
