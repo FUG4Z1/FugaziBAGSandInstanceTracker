@@ -3,6 +3,13 @@
 All notable changes to Fugazi Instance Tracker are listed here.
 
 
+## [3.0.1] — 2026-10-08
+
+small fix:
+ignore sticky IsAltKeyDown after /reload for protect overlay
+Arm Alt/Ctrl only after real MODIFIER_STATE_CHANGED; guard equip race on secure row clicks 
+invalidate DE val after wardrobe collect
+add Callboard/Mythical Cache to opener.
 
 ## [3.0.0] — 2026-08-08
 
