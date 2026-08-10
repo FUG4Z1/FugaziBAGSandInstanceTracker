@@ -2,6 +2,10 @@
 
 All notable changes to Fugazi Instance Tracker are listed here.
 
+## [3.0.2] — 2026-11-08
+
+small fix:
+rebind list-row bag/slot IDs in combat so loot rows click the right item
 
 ## [3.0.1] — 2026-10-08
 
