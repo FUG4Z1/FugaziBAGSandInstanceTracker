@@ -643,7 +643,10 @@ function A.UpdateGPHRowVisuals(btn, item, itemIdx, yOff, rowBelowDivider, destro
         end)
         btn.clickArea:SetScript("OnMouseDown", function(self, mouseButton)
             -- Alt/Ctrl rebuild/re-sort the list; pulse the correct post-refresh row instead.
-            if (IsAltKeyDown and IsAltKeyDown()) or (IsControlKeyDown and IsControlKeyDown()) then
+            -- Live modifiers only (sticky IsAltKeyDown after /reload is ignored).
+            local alt = A.IsAltModifierLive and A.IsAltModifierLive()
+            local ctrl = A.IsCtrlModifierLive and A.IsCtrlModifierLive()
+            if alt or ctrl then
                 return
             end
             if A.TriggerRowPulse then A.TriggerRowPulse(self:GetParent()) end

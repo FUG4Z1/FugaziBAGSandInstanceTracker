@@ -240,8 +240,13 @@ local function RefreshSlot(bag, slot, match, searchMatch)
     if match == nil then match = true end
     local q = tex and ItemQuality(bag, slot)
     local Addon = _G.FugaziBAGS
-    local hasTarget = Addon and Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.bag ~= nil
-    local isTarget = hasTarget and (Addon.activeDisenchantSlot.bag == bag and Addon.activeDisenchantSlot.slot == slot)
+    local act = Addon and Addon.activeDisenchantSlot
+    local casting = UnitCastingInfo and UnitCastingInfo("player")
+    -- hasTarget dims the rest of the grid; isTarget is the bright focus.
+    -- Locked ghost after DE is never isTarget unless cast bar is still up.
+    local hasTarget = act and act.bag ~= nil
+    local isTarget = hasTarget and act.bag == bag and act.slot == slot
+        and (not locked or casting)
     local isFading = spotlightFader and spotlightFader:IsShown()
     -- During DE/profession spotlight, non-targets stay dim (SpotAlpha) but keep real match
     -- so end-of-cast fade can restore filter/search brightness.
@@ -428,9 +433,8 @@ local function RefreshSlot(bag, slot, match, searchMatch)
         _G.FugaziBAGS_EnsureSecureRowBtn(btn, bag, slot)
         local modOv = btn._fugaziModifierOverlay
         if modOv then
-            local altDown = IsAltKeyDown and IsAltKeyDown()
-            local ctrlDown = IsControlKeyDown and IsControlKeyDown()
-            if (altDown or ctrlDown) and not (altDown and ctrlDown) then
+            -- Live Alt/Ctrl only (Actions.ShouldShowModifierOverlay) — not sticky post-reload API.
+            if A.ShouldShowModifierOverlay and A.ShouldShowModifierOverlay() then
                 modOv:Show(); modOv:EnableMouse(true)
             else
                 modOv:Hide(); modOv:EnableMouse(false)
@@ -523,12 +527,16 @@ local function PaintSlot(bag, s, searchQ, filterQ)
 
     if isSpotlight then
         if A.activeDisenchantSlot.bag == bag and A.activeDisenchantSlot.slot == s then
-            -- Target stays fully visible. Non-targets KEEP real filter/search match so the
-            -- last-0.5s SpotAlpha fade can restore "normal" (greens bright / others dark).
-            -- (Old path forced sm/rm false on every non-target → fade could never lift them.)
-            sm = true
-            rm = true
-            isHighlight = true
+            local _, _, slotLocked = GetContainerItemInfo(bag, s)
+            local casting = UnitCastingInfo and UnitCastingInfo("player")
+            -- Do not treat grey loot-lag ghost as the bright spotlight target.
+            if not slotLocked or casting then
+                -- Target stays fully visible. Non-targets KEEP real filter/search match so the
+                -- last-0.5s SpotAlpha fade can restore "normal" (greens bright / others dark).
+                sm = true
+                rm = true
+                isHighlight = true
+            end
         end
     else
         if searchQ ~= nil and searchQ ~= "" and sm then
@@ -1223,9 +1231,8 @@ local function ShowInFrame(f)
             if t < 0.15 then return end
             t = 0
             if not self:IsShown() then return end
-            local alt = IsAltKeyDown and IsAltKeyDown()
-            local ctrl = IsControlKeyDown and IsControlKeyDown()
-            local active = (alt or ctrl) and not (alt and ctrl)
+            -- Live modifiers only — sticky IsAltKeyDown after /reload must not arm overlays.
+            local active = A.ShouldShowModifierOverlay and A.ShouldShowModifierOverlay()
             local bags = (self == gridContent) and BAG_IDS or BANK_BAG_IDS
             local slots = (self == gridContent) and slotButtons or bankSlotButtons
             local mx = (self == gridContent) and MAX_SLOTS or BANK_MAX_SLOTS
@@ -1469,9 +1476,8 @@ local function BankRefreshSlot(bag, slot, match, searchMatch)
         _G.FugaziBAGS_EnsureSecureRowBtn(btn, bag, slot)
         local modOv = btn._fugaziModifierOverlay
         if modOv then
-            local altDown = IsAltKeyDown and IsAltKeyDown()
-            local ctrlDown = IsControlKeyDown and IsControlKeyDown()
-            if (altDown or ctrlDown) and not (altDown and ctrlDown) then
+            -- Live Alt/Ctrl only (Actions.ShouldShowModifierOverlay) — not sticky post-reload API.
+            if A.ShouldShowModifierOverlay and A.ShouldShowModifierOverlay() then
                 modOv:Show(); modOv:EnableMouse(true)
             else
                 modOv:Hide(); modOv:EnableMouse(false)
@@ -1759,9 +1765,8 @@ local function ShowInBankFrame(f, skipPaint)
             if t < 0.15 then return end
             t = 0
             if not self:IsShown() then return end
-            local alt = IsAltKeyDown and IsAltKeyDown()
-            local ctrl = IsControlKeyDown and IsControlKeyDown()
-            local active = (alt or ctrl) and not (alt and ctrl)
+            -- Live modifiers only — sticky IsAltKeyDown after /reload must not arm overlays.
+            local active = A.ShouldShowModifierOverlay and A.ShouldShowModifierOverlay()
             
             wipe(bankChildReuse)
             fillChildReuse(bankChildReuse, self:GetChildren())
@@ -1819,6 +1824,17 @@ spotlightFader:Hide()
 spotlightFader.startAlpha = 0.2
 spotlightFader.elapsed = 0
 
+--- Bag/slot usable as spotlight focus. Grey/locked "ghost" after DE (loot lag) is skipped
+--- so the outro/next cast does not light the item that is already gone server-side.
+--- While the cast bar is up we still allow locked (Blizzard greys the slot mid-cast).
+local function ResolveSpotlightTarget(bag, slot, allowLockedWhileCasting)
+    if bag == nil or slot == nil or bag < 0 then return -1, -1 end
+    local tex, _, locked = GetContainerItemInfo(bag, slot)
+    if not tex then return -1, -1 end
+    if locked and not allowLockedWhileCasting then return -1, -1 end
+    return bag, slot
+end
+
 --- Apply spotlight alphas only (no bag rescan / full paint). Avoids flash on chain-DE retarget.
 local function ApplySpotlightAlphas(targetAlpha, targetBag, targetSlot)
     _G.FugaziBAGS_CombatGrid_SpotAlpha = targetAlpha or 0.2
@@ -1853,17 +1869,20 @@ spotlightFader:SetScript("OnUpdate", function(self, dt)
     local targetAlpha = 1.0
     local Addon = _G.FugaziBAGS
     if not Addon then return end
-    
-    -- Live retarget if chain-spam already picked the next item.
-    if Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.bag ~= nil then
-        self.targetBag = Addon.activeDisenchantSlot.bag
-        self.targetSlot = Addon.activeDisenchantSlot.slot
-    end
 
     -- 3.3.5: UnitCastingInfo returns name, rank, displayName, icon, startTime, endTime, ...
     local spell, _, _, _, startTime, endTime = UnitCastingInfo("player")
     local isCasting = (spell ~= nil and endTime ~= nil)
-    
+    -- Mid-cast: keep focus even if Blizzard greys the slot. After cast / loot lag: skip locked.
+    local allowLocked = isCasting and true or false
+
+    -- Live retarget if chain-spam already picked the next item (never stick on a locked ghost).
+    if Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.bag ~= nil then
+        local b, s = ResolveSpotlightTarget(
+            Addon.activeDisenchantSlot.bag, Addon.activeDisenchantSlot.slot, allowLocked)
+        self.targetBag, self.targetSlot = b, s
+    end
+
     if Addon.isDisenchanting and isCasting then
         local now = GetTime() * 1000
         local timeRemaining = (endTime - now) / 1000
@@ -1885,6 +1904,9 @@ spotlightFader:SetScript("OnUpdate", function(self, dt)
         -- If a new DE was already armed (chain spam), snap back to dim on the new target
         -- instead of finishing a bright flash then jumping.
         if Addon.isDisenchanting and Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.bag ~= nil then
+            local b, s = ResolveSpotlightTarget(
+                Addon.activeDisenchantSlot.bag, Addon.activeDisenchantSlot.slot, false)
+            self.targetBag, self.targetSlot = b, s
             targetAlpha = 0.2
             self.startAlpha = 0.2
             self.elapsed = 0
@@ -1892,6 +1914,9 @@ spotlightFader:SetScript("OnUpdate", function(self, dt)
             ApplySpotlightAlphas(0.2, self.targetBag, self.targetSlot)
             return
         end
+
+        -- End fade: never keep a locked/empty ghost as the bright focus.
+        self.targetBag, self.targetSlot = ResolveSpotlightTarget(self.targetBag, self.targetSlot, false)
 
         self.elapsed = (self.elapsed or 0) + dt
         local progress = math.min(1, self.elapsed / 0.5)
@@ -1940,15 +1965,18 @@ _G.FugaziBAGS_CombatGrid = {
         local Addon = _G.FugaziBAGS
         if isReset then
             -- Chain-spam already armed the next item: retarget dim, do not flash full→dim.
+            -- Skip if that arm is already client-locked (should not happen; finder skips locked).
             if Addon and Addon.isDisenchanting and Addon.activeDisenchantSlot
                 and Addon.activeDisenchantSlot.bag ~= nil then
-                spotlightFader.targetBag = Addon.activeDisenchantSlot.bag
-                spotlightFader.targetSlot = Addon.activeDisenchantSlot.slot
+                local b, s = ResolveSpotlightTarget(
+                    Addon.activeDisenchantSlot.bag, Addon.activeDisenchantSlot.slot, false)
+                spotlightFader.targetBag = b
+                spotlightFader.targetSlot = s
                 spotlightFader.startAlpha = 0.2
                 spotlightFader.elapsed = 0
                 spotlightFader._ending = nil
                 spotlightFader:Show()
-                ApplySpotlightAlphas(0.2, spotlightFader.targetBag, spotlightFader.targetSlot)
+                ApplySpotlightAlphas(0.2, b, s)
                 return
             end
             if not spotlightFader:IsShown() then
@@ -1958,6 +1986,9 @@ _G.FugaziBAGS_CombatGrid = {
                 RefreshAllSlots(true)
                 return
             end
+            -- End fade: drop focus if the finished slot is grey/locked loot-lag ghost.
+            local tb, ts = ResolveSpotlightTarget(spotlightFader.targetBag, spotlightFader.targetSlot, false)
+            spotlightFader.targetBag, spotlightFader.targetSlot = tb, ts
             -- Continue existing fade from current SpotAlpha (last 0.5s / post-cast ease).
             spotlightFader.startAlpha = _G.FugaziBAGS_CombatGrid_SpotAlpha or 0.2
             spotlightFader.elapsed = 0
@@ -1965,6 +1996,8 @@ _G.FugaziBAGS_CombatGrid = {
         else
             local newBag = Addon and Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.bag or -1
             local newSlot = Addon and Addon.activeDisenchantSlot and Addon.activeDisenchantSlot.slot or -1
+            -- New cast arm: never spotlight a locked/empty ghost (finder should have skipped it).
+            newBag, newSlot = ResolveSpotlightTarget(newBag, newSlot, false)
             local alreadyDim = spotlightFader:IsShown()
                 and (_G.FugaziBAGS_CombatGrid_SpotAlpha or 1) < 0.9
             spotlightFader.targetBag = newBag

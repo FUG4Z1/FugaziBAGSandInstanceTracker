@@ -620,10 +620,12 @@ local function ExpireSlotLockIfStale(lockedSlots, key, now)
     return lockTime
 end
 
---- First openable container in bags (clams, lockboxes, caches).
+--- First openable container in bags (clams, caches, packages).
 --- Live bag scan only — do NOT use lockedDisenchantSlots or GetContainerItemInfo "locked".
 --- Spam/loot leaves slots client-locked; skipping those hid the Open button while boxes
 --- were still in bags. Prefer an unlocked slot for /use when one exists.
+--- Match OpenerList by itemId OR exact name (e.g. ["Mythical Cache"] = true).
+--- Skip tooltip-"Locked" items so lockboxes stay listed but never drive the Open button.
 function A.GetFirstOpenableInBags()
     local list = A.OpenerList
     if not list then return nil end
@@ -635,7 +637,9 @@ function A.GetFirstOpenableInBags()
             local link = GetContainerItemLink and GetContainerItemLink(bag, slot)
             if link then
                 local itemId = tonumber(link:match("item:(%d+)"))
-                if itemId and list[itemId] then
+                local name = A.GetCachedItemInfo and select(1, A.GetCachedItemInfo(link))
+                local onList = (itemId and list[itemId]) or (name and list[name])
+                if onList and not IsItemLockedLockbox(bag, slot) then
                     local tex, _, locked = GetContainerItemInfo(bag, slot)
                     if tex then
                         if not locked then
@@ -990,8 +994,12 @@ lootHandler:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 lootHandler:RegisterEvent("BAG_UPDATE")
 lootHandler:SetScript("OnEvent", function(self, event, ...)
     if event == "LOOT_OPENED" then
-        -- Auto-loot DE/prospect/mill shards even if the next chain-cast already cleared isDisenchanting.
-        if A.isDisenchanting or A._gphPendingDestroyLoot then
+        -- Hide/auto-loot DE shards. After cast end, isDisenchanting is already nil;
+        -- ClearProcessingState sets _gphPendingDestroyLoot. Also trust activeDisenchantSlot
+        -- (kept for fade) so a later flag clear cannot re-show the default loot frame.
+        local act = A.activeDisenchantSlot
+        if A.isDisenchanting or A._gphPendingDestroyLoot
+            or (act and act.kind ~= "learn") then
             if _G.LootFrame then _G.LootFrame:Hide() end
             if _G.ElvLootFrame then _G.ElvLootFrame:Hide() end
             for i = 1, GetNumLootItems() do
@@ -1070,19 +1078,12 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
         end
         if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
     elseif event == "LOOT_CLOSED" then
-        local act = A.activeDisenchantSlot
-        A.isDisenchanting = nil
+        -- Only clear the "auto-loot this" flag.
+        -- Do NOT wipe isDisenchanting or re-run fades here: ClearProcessingState already
+        -- ended the cast/fade. On chain-spam, LOOT_CLOSED from the *previous* DE arrives
+        -- after the *next* click armed a new cast — wiping/fading there caused flicker
+        -- and "DE won't cast" when auto-loot was working.
         A._gphPendingDestroyLoot = nil
-        if A.FadeRestoreGPHListRows then
-            A.FadeRestoreGPHListRows(act and act.bag, act and act.slot, act and act.itemId, act and act.kind)
-        elseif A.ClearAllGPHListRowDims then
-            A.ClearAllGPHListRowDims()
-        end
-        -- Do not wipe all slot locks — next chain click still needs them to avoid re-target.
-        if _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.StartSpotlightFade then
-            _G.FugaziBAGS_CombatGrid.StartSpotlightFade(true)
-        end
-        if A.DirtyDestroyableCache then A.DirtyDestroyableCache() end
     elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_SUCCEEDED"
         or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
         local unit, spellName = ...
@@ -1097,16 +1098,39 @@ lootHandler:SetScript("OnEvent", function(self, event, ...)
         local isLearnEnd = (kind == "learn") and (event == "UNIT_SPELLCAST_STOP"
             or event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_INTERRUPTED"
             or event == "UNIT_SPELLCAST_FAILED")
-        if isDestroySpell or isLearnEnd or (A.isDisenchanting and isDestroySpell) then
+        local isFail = (event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED")
+        if isDestroySpell or isLearnEnd then
             local retryKey = nil
             if act and act.bag ~= nil then
                 retryKey = act.bag .. "_" .. act.slot
             end
+
+            -- Chain-spam: STOP/SUCCEEDED from cast N can arrive after PreClick armed cast N+1.
+            -- Clearing then wipes the new cast's spotlight (skips a turn). Only end the real
+            -- finished cast — never clobber a newer arm or a cast already on the bar.
+            if not isFail and not isLearnEnd then
+                if UnitCastingInfo and UnitCastingInfo("player") then
+                    A._gphPendingDestroyLoot = true
+                    return
+                end
+                -- Duplicate STOP after SUCCEEDED already cleared, or brand-new PreClick arm.
+                if not A.isDisenchanting then
+                    A._gphPendingDestroyLoot = true
+                    return
+                end
+                if act and act.time and (GetTime() - act.time) < 0.45 then
+                    A._gphPendingDestroyLoot = true
+                    return
+                end
+            end
+
             if A.isDisenchanting or isLearnEnd or isDestroySpell then
                 A.ClearProcessingState()
-                A._gphPendingDestroyLoot = nil
-                if (event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED")
-                    and retryKey and A.lockedDisenchantSlots then
+                -- Keep pending loot after real DE success so LOOT_OPENED still auto-hides.
+                if isFail or isLearnEnd then
+                    A._gphPendingDestroyLoot = nil
+                end
+                if isFail and retryKey and A.lockedDisenchantSlots then
                     A.lockedDisenchantSlots[retryKey] = nil
                 end
             end

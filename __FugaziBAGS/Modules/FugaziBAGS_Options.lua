@@ -2886,6 +2886,10 @@ function A.GPHTitleMenu_Initialize(self, level)
                         if A then
                             A._gphBagSpaceDirty = true
                         end
+                        -- Wardrobe bind-on-collect flips BoE → soulbound; drop sticky DE valuation.
+                        if A and A.InvalidateValuationCache then
+                            A.InvalidateValuationCache("wardrobe")
+                        end
                         if _G.RefreshGPHUI then
                             _G.RefreshGPHUI()
                         end

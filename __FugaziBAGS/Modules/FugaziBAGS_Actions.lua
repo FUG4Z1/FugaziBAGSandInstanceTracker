@@ -86,13 +86,49 @@ function A.GetBagSlotFromFrame(frame)
     return bag, slot
 end
 
+-- ---------------------------------------------------------------------------
+-- Modifier overlay arming (protect / autodelete)
+--
+-- 3.3.5a: IsAltKeyDown()/IsControlKeyDown() can stay true after /reload even
+-- when the key is not held. Trusting that alone enabled the click-stealing
+-- overlay and made bag clicks toggle protect until the user tapped Alt.
+--
+-- Fix: only treat Alt/Ctrl as active after a real MODIFIER_STATE_CHANGED for
+-- that key this session. Stuck API-true with no live event = ignore.
+-- ---------------------------------------------------------------------------
+local altLive = false
+local ctrlLive = false
+
+--- True only when we saw a real Alt key event AND the client still reports Alt down.
+function A.IsAltModifierLive()
+    if not altLive then return false end
+    return (IsAltKeyDown and IsAltKeyDown()) and true or false
+end
+
+--- True only when we saw a real Ctrl key event AND the client still reports Ctrl down.
+function A.IsCtrlModifierLive()
+    if not ctrlLive then return false end
+    return (IsControlKeyDown and IsControlKeyDown()) and true or false
+end
+
+--- Should the protect/destroy mouse overlay capture clicks?
+function A.ShouldShowModifierOverlay()
+    local alt = A.IsAltModifierLive()
+    local ctrl = A.IsCtrlModifierLive()
+    return (alt or ctrl) and not (alt and ctrl)
+end
+
+--- Clear live arming (login / reload). Does not inject keys — just forgets false "down" state.
+function A.ResetModifierLiveState()
+    altLive = false
+    ctrlLive = false
+end
+
 -- Alt/Ctrl protect-destroy overlay only (no GameTooltip work).
 local function SyncModOverlay(canonical)
     local modOv = canonical and canonical._fugaziModifierOverlay
     if not modOv then return end
-    local altDown = IsAltKeyDown()
-    local ctrlDown = IsControlKeyDown()
-    if (altDown or ctrlDown) and not (altDown and ctrlDown) then
+    if A.ShouldShowModifierOverlay() then
         modOv:Show()
         modOv:EnableMouse(true)
     else
@@ -303,9 +339,31 @@ end
 
 -- Alt/Ctrl only: flip protect/destroy overlay. Never rebuild GameTooltip (Shift was
 -- re-showing bag item compare after bags closed via full HandleBagSlotEnter).
+-- Also the only place we arm altLive/ctrlLive (real key events, not sticky API).
 local _gphModifierMonitor = CreateFrame("Frame")
 _gphModifierMonitor:RegisterEvent("MODIFIER_STATE_CHANGED")
-_gphModifierMonitor:SetScript("OnEvent", function()
+_gphModifierMonitor:RegisterEvent("PLAYER_LOGIN")
+_gphModifierMonitor:RegisterEvent("PLAYER_ENTERING_WORLD")
+_gphModifierMonitor:SetScript("OnEvent", function(_, event, key)
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+        -- After reload, drop any latched "armed" state so sticky IsAltKeyDown is ignored.
+        A.ResetModifierLiveState()
+        local row = A._gphLastHoveredRow
+        if row and row:IsVisible() then
+            SyncModOverlay(row)
+        end
+        return
+    end
+
+    -- MODIFIER_STATE_CHANGED: key is e.g. "LALT","RALT","LCTRL","RCTRL" (3.3.5).
+    if type(key) == "string" then
+        if key == "LALT" or key == "RALT" then
+            altLive = (IsAltKeyDown and IsAltKeyDown()) and true or false
+        elseif key == "LCTRL" or key == "RCTRL" then
+            ctrlLive = (IsControlKeyDown and IsControlKeyDown()) and true or false
+        end
+    end
+
     local row = A._gphLastHoveredRow
     if row and row:IsVisible() then
         SyncModOverlay(row)
@@ -724,8 +782,9 @@ end
 function A.GPHQualBtn_OnClick(self, button)
     if A.PlayClickSound then A.PlayClickSound() end
     if _G.MerchantFrame and _G.MerchantFrame:IsShown() and _G.FugaziVendorProtectUnhookNow then _G.FugaziVendorProtectUnhookNow() end
-    local ctrl  = IsControlKeyDown and IsControlKeyDown()
-    local alt   = IsAltKeyDown and IsAltKeyDown()
+    -- Live modifiers only (sticky IsAltKeyDown after /reload must not mass-protect rarities).
+    local ctrl  = A.IsCtrlModifierLive and A.IsCtrlModifierLive() or false
+    local alt   = A.IsAltModifierLive and A.IsAltModifierLive() or false
     local shift = IsShiftKeyDown and IsShiftKeyDown()
 
     local q = self.quality

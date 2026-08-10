@@ -29,6 +29,20 @@ local function deferSecureNextFrame(clickArea, scriptName)
     d:Show()
 end
 
+--- Expected item for this secure click: list row cache first, else live bag/slot id.
+local function SyncSecureExpectedItemId(btn, clickArea, bag, slot)
+    if not btn then return end
+    local row = clickArea and clickArea.GetParent and clickArea:GetParent()
+    local fromRow = row and row.cachedItemId
+    if fromRow then
+        btn._expectedItemId = fromRow
+    elseif GetContainerItemID and bag ~= nil and slot ~= nil then
+        btn._expectedItemId = GetContainerItemID(bag, slot)
+    else
+        btn._expectedItemId = nil
+    end
+end
+
 --- Secure bag-slot button (works in combat, Alt/Ctrl clicks).
 local function EnsureSecureRowBtn(clickArea, bag, slot)
     local par = clickArea._fugaziSecPar
@@ -44,12 +58,18 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
             if btn:GetID() ~= slot then btn:SetID(slot) end
             if not par:IsShown() then par:Show() end
             if not btn:IsShown() then btn:Show() end
+            -- Restore after a stale-click no-op (equip spam race).
+            if btn._idRestore then
+                btn:SetID(btn._idRestore)
+                btn._idRestore = nil
+            end
         end
 
         -- Identity mirroring (for tooltips/hovers) — always safe.
         par.bag = bag; par.slot = slot
         btn.bag = bag; btn.slot = slot
         if modOverlay then modOverlay.bag = bag; modOverlay.slot = slot end
+        SyncSecureExpectedItemId(btn, clickArea, bag, slot)
 
         return
     end
@@ -70,6 +90,7 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
     -- Identity mirroring
     par.bag = bag; par.slot = slot
     btn.bag = bag; btn.slot = slot
+    SyncSecureExpectedItemId(btn, clickArea, bag, slot)
     
     btn:SetFrameLevel((par:GetFrameLevel() or 1) + 1)
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -97,10 +118,45 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
         A.HandleBagSlotEnter(clickArea, true)
     end
     btn:SetScript("OnLeave", function(self) A.HandleBagSlotLeave(clickArea) end)
+    -- Equip spam race: click equips row item → old gear lands in same bag/slot →
+    -- second click before row rebuild equips the old piece. Block when live id ≠ expected.
+    btn:HookScript("PreClick", function(self, button)
+        if InCombatLockdown and InCombatLockdown() then return end
+        -- Live Alt/Ctrl only; sticky post-reload IsAltKeyDown must not skip equip guard forever.
+        local alt = A.IsAltModifierLive and A.IsAltModifierLive()
+        local ctrl = A.IsCtrlModifierLive and A.IsCtrlModifierLive()
+        if alt or ctrl or (IsShiftKeyDown and IsShiftKeyDown()) then
+            return
+        end
+        local expected = self._expectedItemId
+        if not expected then
+            local row = clickArea.GetParent and clickArea:GetParent()
+            expected = (row and row.cachedItemId) or clickArea.cachedItemId
+        end
+        if not expected then return end
+        local b = self:GetParent() and self:GetParent():GetID()
+        local s = self:GetID()
+        if b == nil or s == nil then return end
+        local cur = GetContainerItemID and GetContainerItemID(b, s)
+        if cur and cur ~= expected then
+            -- Slot 0 is invalid (1-based) → template UseContainerItem becomes a no-op.
+            self._idRestore = s
+            self:SetID(0)
+        end
+    end)
+    btn:HookScript("PostClick", function(self)
+        if not self._idRestore then return end
+        if not (InCombatLockdown and InCombatLockdown()) then
+            self:SetID(self._idRestore)
+        end
+        self._idRestore = nil
+    end)
     btn:HookScript("OnMouseDown", function(self, mouseButton)
         -- Skip on Alt/Ctrl: protect/destroy re-sorts list rows; pre-refresh pulse sticks to
         -- the wrong pool frame (shows on the item above after protect moves this one up).
-        if (IsAltKeyDown and IsAltKeyDown()) or (IsControlKeyDown and IsControlKeyDown()) then
+        local alt = A.IsAltModifierLive and A.IsAltModifierLive()
+        local ctrl = A.IsCtrlModifierLive and A.IsCtrlModifierLive()
+        if alt or ctrl then
             return
         end
         if Addon and A.TriggerRowPulse then A.TriggerRowPulse(clickArea:GetParent()) end
@@ -150,8 +206,11 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
             s = ca.slot or ca.slotID or (ca.cachedItem and ca.cachedItem.slot)
         end
         
-        local altDown = IsAltKeyDown and IsAltKeyDown()
-        local ctrlDown = IsControlKeyDown and IsControlKeyDown()
+        -- Live modifiers only (see Actions.IsAltModifierLive) — ignore sticky IsAltKeyDown after /reload.
+        local altDown = (A.IsAltModifierLive and A.IsAltModifierLive())
+            or (not A.IsAltModifierLive and IsAltKeyDown and IsAltKeyDown())
+        local ctrlDown = (A.IsCtrlModifierLive and A.IsCtrlModifierLive())
+            or (not A.IsCtrlModifierLive and IsControlKeyDown and IsControlKeyDown())
         local shiftDown = IsShiftKeyDown and IsShiftKeyDown()
 
         local isProtectClick = (altDown and not ctrlDown and button == "LeftButton")

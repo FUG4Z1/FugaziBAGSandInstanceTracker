@@ -287,6 +287,10 @@ if _G.C_AppearanceCollection and _G.C_AppearanceCollection.CollectItemAppearance
                 local A = _G.FugaziBAGS
                 if A and A._gphWardrobeCache then wipe(A._gphWardrobeCache) end
                 if A then A._gphBagSpaceDirty = true end
+                -- Wardrobe bind-on-collect flips BoE → soulbound; drop sticky DE valuation.
+                if A and A.InvalidateValuationCache then
+                    A.InvalidateValuationCache("wardrobe")
+                end
                 if _G.RefreshGPHUI then _G.RefreshGPHUI() end
                 if _G.RefreshBankUI then _G.RefreshBankUI() end
                 if _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.RefreshSlots then
@@ -297,6 +301,11 @@ if _G.C_AppearanceCollection and _G.C_AppearanceCollection.CollectItemAppearance
                 end
             end)
             _G.C_Timer.After(1.2, function()
+                local A = _G.FugaziBAGS
+                -- Second pass: bind text can lag a moment after CollectItemAppearance.
+                if A and A.InvalidateValuationCache then
+                    A.InvalidateValuationCache("wardrobe")
+                end
                 if _G.RefreshGPHUI then _G.RefreshGPHUI() end
                 if _G.RefreshBankUI then _G.RefreshBankUI() end
                 if _G.FugaziBAGS_CombatGrid and _G.FugaziBAGS_CombatGrid.RefreshSlots then

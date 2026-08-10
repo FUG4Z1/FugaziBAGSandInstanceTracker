@@ -267,7 +267,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                     end
                 end
             end
-            if A.activeDisenchantSlot and (bagID == nil or A.activeDisenchantSlot.bag == bagID) then
+            -- Do not wipe activeDisenchantSlot while a destroy cast is armed/running —
+            -- bag lag after the *previous* DE would clear the *next* spam target and skip spotlight.
+            if A.activeDisenchantSlot and not A.isDisenchanting
+                and (bagID == nil or A.activeDisenchantSlot.bag == bagID) then
                 local currentID = GetContainerItemID and GetContainerItemID(A.activeDisenchantSlot.bag, A.activeDisenchantSlot.slot)
                 if not currentID or currentID ~= A.activeDisenchantSlot.itemId then
                     A.activeDisenchantSlot = nil
