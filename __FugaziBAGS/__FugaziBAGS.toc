@@ -2,7 +2,7 @@
 ## Title: |cff87ab4f__FugaziBAGS|r
 ## Notes: Customizable inventory with Lootfilter, advanced searching and more. Check Instructions in Escape Menu.
 ## Author: Fugazi
-## Version: 3.0.1
+## Version: 3.0.2
 ## SavedVariables: FugaziBAGSDB, FugaziBAGS_AddonEnabled
 ## DefaultState: enabled
 ## LoadOnDemand: 0

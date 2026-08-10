@@ -52,17 +52,23 @@ local function EnsureSecureRowBtn(clickArea, bag, slot)
 
     -- 1. If we already have the frames, just update them and RETURN
     if par and btn then
-        -- SetID / Show / Hide on ContainerFrameItemButton are protected in combat.
+        -- Click identity MUST track the list row even in combat.
+        -- List pool recycles rows on loot: icon/name use .bag/.slot mirrors (safe),
+        -- but ContainerFrameItemButton uses parent:GetID()/self:GetID() for UseContainerItem.
+        --
+        -- SetID is NOT combat-locked on 3.3.5. Show/Hide on these frames can be — gate those only.
+        -- Bug shipped in 53856a3 (2026-08-04): skipped SetID in combat → new drop rows looked
+        -- right but the click still aimed at the previous bag/slot until bags were reopened.
+        if btn._idRestore then
+            -- Rebind wins over equip-race pin (PreClick already skips in combat).
+            btn._idRestore = nil
+        end
+        if par:GetID() ~= bag then par:SetID(bag) end
+        if btn:GetID() ~= slot then btn:SetID(slot) end
+
         if not inCombat then
-            if par:GetID() ~= bag then par:SetID(bag) end
-            if btn:GetID() ~= slot then btn:SetID(slot) end
             if not par:IsShown() then par:Show() end
             if not btn:IsShown() then btn:Show() end
-            -- Restore after a stale-click no-op (equip spam race).
-            if btn._idRestore then
-                btn:SetID(btn._idRestore)
-                btn._idRestore = nil
-            end
         end
 
         -- Identity mirroring (for tooltips/hovers) — always safe.
