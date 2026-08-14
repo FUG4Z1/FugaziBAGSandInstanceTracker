@@ -1849,6 +1849,7 @@ A.OpenerList = {
     [22137] = true, -- Ysida's Satchel
     --#ASCENSION
     [2021814] = true, -- Dungeon Spoils
+    [1202039] = true, -- Dungeon Spoils (Heroic)
     [1397884] = true, -- Adventurer's Satchel (by ID)
     [97871] = true, -- Craftman's Codex
     [777998] = true, -- Trademan's Scroll
@@ -1860,6 +1861,9 @@ A.OpenerList = {
     [1397886] = true, -- Adventurer's Cache (Rare)
     [1170083] = true, -- Personal Cache
     [1615005] = true, -- Callboard Cache (Onyxia normal)
+    [559842] = true, -- Azzar Faire Lucky Box
+    [1615011] = true, -- Treasures of Azeroth
+    [1400040] = true, -- Cache of the Fire lord (Heroic)
     ["Battleground Spoils"] = true, -- by exact Name across all level brackets
     ["Mythical Cache"] = true, -- by exact Name across all level brackets
 }

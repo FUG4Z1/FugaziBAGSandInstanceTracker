@@ -142,7 +142,7 @@ function L.IsAscensionRealm()
     return false
 end
 
---- Main /fit window: classic = hourly cap + lockouts; Ascension = lockouts (+ boss tooltip scrape).
+--- Main /fit window: classic = hourly cap + lockouts; Ascension = lockouts.
 function L.IsMainTrackerUIEnabled()
     return true
 end
@@ -444,18 +444,15 @@ end
 ----------------------------------------------------------------------
 -- LIVE UPDATE ENGINE
 ----------------------------------------------------------------------
-local elapsed_acc, raidinfo_acc = 0, 0
+local elapsed_acc = 0
 function L.OnUpdate(self, elapsed)
     elapsed_acc = elapsed_acc + elapsed
-    raidinfo_acc = raidinfo_acc + elapsed
     if elapsed_acc >= 1 then
         elapsed_acc = 0
-        -- Cap / lockout timers only. Item list is event-driven (BAG_UPDATE -> DiffBags).
-        if type(L.RefreshUI) == "function" then L.RefreshUI() end
-    end
-    if raidinfo_acc >= 30 then 
-        raidinfo_acc = 0
-        if type(RequestRaidInfo) == "function" then RequestRaidInfo() end
+        -- Hourly cap numbers only. Do not rebuild lockouts or RequestRaidInfo here.
+        if type(L.TickHourlyCapText) == "function" then
+            L.TickHourlyCapText()
+        end
     end
 end
 
@@ -1065,6 +1062,9 @@ L.coreEventFrame:SetScript("OnEvent", function(self, event, ...)
                 L.frame:SetPoint("TOP", UIParent, "CENTER", 0, 200)
             end
             if L.frame:IsShown() then L.frame:SetScript("OnUpdate", L.OnUpdate) end
+            if L.CapData and L.CapData.EnsureResetReplayHooks then
+                L.CapData.EnsureResetReplayHooks()
+            end
             if RequestRaidInfo then RequestRaidInfo() end
             if L.UpdateLockoutCache then L.UpdateLockoutCache() end
             if L.frame:IsShown() then L.RefreshUI(true) end
@@ -1102,7 +1102,10 @@ L.coreEventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     if event == "UPDATE_INSTANCE_INFO" then
-        L.UpdateLockoutCache(); L.RefreshUI()
+        if L.frame and L.frame:IsShown() then
+            if L.UpdateLockoutCache then L.UpdateLockoutCache() end
+            if L.RefreshUI then L.RefreshUI(true) end
+        end
 
     elseif event == "PLAYER_MONEY" then
         local key = L.GetGphCharKey()

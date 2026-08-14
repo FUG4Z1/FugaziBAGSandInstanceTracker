@@ -40,7 +40,7 @@ local IT_SOUND_CLICK = "Interface\\AddOns\\__FugaziBAGS\\media\\click.ogg"
 local IT_SOUND_HOVER = "Interface\\AddOns\\__FugaziBAGS\\media\\hover.ogg"
 local IT_SOUND_SWOOSH = "Interface\\AddOns\\__FugaziBAGS\\media\\Swoosh2.ogg"
 local IT_CLICK_GAP = 0.04
-local IT_HOVER_GAP = 0.05
+local IT_HOVER_GAP = 0.20
 
 local function IT_SoundsEnabled()
     local SV = _G.FugaziBAGSDB
@@ -64,15 +64,16 @@ end
 
 --- Hover feedback (row enter). Does not share throttle with click.
 function L.PlayUIHoverSound()
+    if L._silentUIRebuild then return end
     if not IT_SoundsEnabled() or not PlaySoundFile then return end
+    local now = (GetTime and GetTime()) or 0
+    if (L._uiHoverSoundLast or 0) > 0 and (now - L._uiHoverSoundLast) < IT_HOVER_GAP then return end
+    L._uiHoverSoundLast = now
     local FB = _G.FugaziBAGS
     if FB and FB.PlayHoverSound then
         FB.PlayHoverSound()
         return
     end
-    local now = (GetTime and GetTime()) or 0
-    if (L._uiHoverSoundLast or 0) > 0 and (now - L._uiHoverSoundLast) < IT_HOVER_GAP then return end
-    L._uiHoverSoundLast = now
     PlaySoundFile(IT_SOUND_HOVER)
 end
 
@@ -746,8 +747,6 @@ L.runSoftPaused = false  -- ghost/corpse-run: currentRun kept open, timer keeps 
 -- Lockout snapshot: when we last asked the game for saved lockouts (to avoid spamming).
 L.lockoutQueryTime = 0
 L.lockoutCache = {}
--- instanceId -> { { name, status, killed, timeText }, ... } from Raid Info tooltip scrape
-L.lockoutBossCache = L.lockoutBossCache or {}
 
 -- Current run: the dungeon/raid you're in right now (saved to Ledger when you leave).
 L.currentRun = nil
@@ -945,7 +944,7 @@ SlashCmdList["INSTANCETRACKER_LEDGER"] = function()
     L.RefreshStatsUI()
 end
 
--- Toggle main tracker: classic hourly+lockouts; Ascension lockouts (+ boss scrape).
+-- Toggle main tracker: classic hourly+lockouts; Ascension lockouts.
 SlashCmdList["INSTANCETRACKER"] = function()
     if L.IsMainTrackerUIEnabled and not L.IsMainTrackerUIEnabled() then
         return
@@ -963,10 +962,6 @@ SlashCmdList["INSTANCETRACKER"] = function()
         InstanceTrackerDB.mainFrameUserClosed = false
         if RequestRaidInfo then RequestRaidInfo() end
         if L.UpdateLockoutCache then L.UpdateLockoutCache() end
-        -- Best-effort boss fill when RaidInfo buttons already exist this session
-        if L.IsAscensionRealm and L.IsAscensionRealm() and L.RefreshLockoutBossCache then
-            L.RefreshLockoutBossCache()
-        end
         L.frame:Show()
         L.SaveFrameLayout(L.frame, "frameShown", "framePoint")
         L.RefreshUI(true)

@@ -2,7 +2,7 @@
 ## Title: |cff87ab4f__FugaziInstanceTracker|r
 ## Notes: Instance limit tracker and run ledger to record Gold, GPH and Items gained through Dungeon runs and farming sessions.
 ## Author: Fugazi
-## Version: 3.0.0
+## Version: 3.1.0
 ## SavedVariables: InstanceTrackerDB
 ## RequiredDeps: __FugaziBAGS
 

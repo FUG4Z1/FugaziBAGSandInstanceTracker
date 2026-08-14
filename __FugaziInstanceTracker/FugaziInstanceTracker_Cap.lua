@@ -229,15 +229,6 @@ capEventFrame:SetScript("OnEvent", function(self, event, ...)
                     dName = select(4, GetInstanceInfo())
                     mapId = select(8, GetInstanceInfo())
                 end
-                if L.CapData and L.CapData.RememberResettable then
-                    L.CapData.RememberResettable(zoneName, {
-                        source = "enter",
-                        isRaid = (instanceType == "raid"),
-                        diff = dIdx,
-                        difficultyName = dName,
-                        mapId = mapId,
-                    })
-                end
                 RequestRaidInfo()
                 -- Soft-paused run still on L.currentRun: just continue (no history restore).
                 if not L.currentRun or L.currentRun.name ~= zoneName then
@@ -254,7 +245,6 @@ capEventFrame:SetScript("OnEvent", function(self, event, ...)
                         L.RefreshStatsUI()
                     end
                 end
-                -- Keep reset/API fields on the live run for Reset ID.
                 if L.currentRun and L.currentRun.name == zoneName then
                     L.currentRun.diff = dIdx or L.currentRun.diff
                     L.currentRun.difficultyName = dName or L.currentRun.difficultyName
@@ -288,10 +278,6 @@ capEventFrame:SetScript("OnEvent", function(self, event, ...)
                     L.SoftPauseRun()
                 else
                     L.ClearSoftPause()
-                    -- Track for Reset ID menu / list (GetSavedInstanceInfo often omits normal IDs on Ascension).
-                    if L.currentRun and L.currentRun.name and L.CapData and L.CapData.RememberResettable then
-                        L.CapData.RememberResettable(L.currentRun.name, { source = "exit" })
-                    end
                     L.FinalizeRun()
                     L.isInInstance = false
                     L.currentZone = ""
@@ -344,10 +330,10 @@ end)
 ----------------------------------------------------------------------
 -- CAP AND LOCKOUTS DATA LAYER
 -- Classic 3.3.5a: hourly cap + lockouts + reset.
--- Ascension: no hourly cap; lockouts + instance ID + boss rows (tooltip scrape).
+-- Ascension: no hourly cap; lockouts mirror Raid Info (no scrape loop).
 ----------------------------------------------------------------------
 L.CapData = {}
-local _lockoutBuckets = { classic = {}, tbc = {}, wotlk = {}, unknown = {} }
+local _lockoutBuckets = { world = {}, classic = {}, tbc = {}, wotlk = {}, unknown = {} }
 
 function L.CapData.GetHourlyStats()
     local now = time()
@@ -381,14 +367,24 @@ function L.CapData.GetHourlyStats()
     return stats
 end
 
+function L.TickHourlyCapText()
+    if not L.frame or not L.frame.hourlyText or not L.frame:IsShown() then return end
+    if not L.IsHourlyCapEnabled or not L.IsHourlyCapEnabled() then return end
+    local capData = L.CapData.GetHourlyStats()
+    if not capData or not capData.enabled then return end
+    local countColor = capData.remaining <= 0 and "|cffff4444" or capData.remaining <= 2 and "|cffff8800" or "|cff44ff44"
+    local nextSlot = capData.nextSlotTimer > 0 and ("  |cffcccccc(next slot in " .. (L.FormatTime and L.FormatTime(capData.nextSlotTimer) or capData.nextSlotTimer) .. ")|r") or ""
+    local label = (L.ColorizeFugaziRowLabel and L.ColorizeFugaziRowLabel("Hourly Cap:")) or "Hourly Cap:"
+    L.frame.hourlyText:SetText(
+        label .. "  "
+        .. countColor .. capData.count .. "/" .. capData.max .. "|r"
+        .. "  " .. countColor .. "(" .. capData.remaining .. " left)|r"
+        .. nextSlot
+    )
+end
+
 function L.CapData.GetLockouts()
-    -- Always refresh on Ascension (boss cache / IDs matter); classic every 5s.
-    local isAsc = L.IsAscensionRealm and L.IsAscensionRealm()
-    local age = L.lockoutQueryTime and (time() - L.lockoutQueryTime) or 999
-    if isAsc or age > 5 then
-        if L.UpdateLockoutCache then L.UpdateLockoutCache() end
-    end
-    
+    wipe(_lockoutBuckets.world)
     wipe(_lockoutBuckets.classic)
     wipe(_lockoutBuckets.tbc)
     wipe(_lockoutBuckets.wotlk)
@@ -430,15 +426,10 @@ function L.CapData.GetLockouts()
             timeLeft = 0
         end
         
-        -- Boss list: cache entry or live on info
-        local bosses = info.bosses
-        if (not bosses or #bosses == 0) and info.id and L.lockoutBossCache and L.lockoutBossCache[info.id] then
-            bosses = L.lockoutBossCache[info.id].bosses
-        end
-        
         table.insert(target, {
             name = info.name,
             id = info.id,
+            mapID = info.mapID,
             diff = info.diff,
             diffTag = diffTag,
             difficultyName = info.difficultyName,
@@ -447,7 +438,7 @@ function L.CapData.GetLockouts()
             extended = info.extended,
             timeLeft = timeLeft,
             timeUnknown = timeUnknown,
-            bosses = bosses,
+            bosses = info.bosses,
         })
     end
     
@@ -455,8 +446,9 @@ function L.CapData.GetLockouts()
 end
 
 ----------------------------------------------------------------------
--- Instance ID reset (Ascension uses COMFIRM_RESET_SPECIFIC_INSTANCE +
--- ResetInstanceDifficult — note the COMFIRM typo and Difficult spelling).
+-- Reset = replay portrait → Reset Instances.
+-- Learn the StaticPopup data table once; never call ResetInstanceDifficult
+-- and never replace OnAccept. data must be a table (unpack).
 ----------------------------------------------------------------------
 
 local function CapPrint(msg)
@@ -465,29 +457,9 @@ local function CapPrint(msg)
     end
 end
 
-local function ScheduleLockoutRefresh(delay)
-    delay = delay or 0.8
-    if not L._resetRefreshFrame then
-        L._resetRefreshFrame = CreateFrame("Frame")
-    end
-    local f = L._resetRefreshFrame
-    local elapsed = 0
-    f:SetScript("OnUpdate", function(self, e)
-        elapsed = elapsed + e
-        if elapsed < delay then return end
-        self:SetScript("OnUpdate", nil)
-        if RequestRaidInfo then RequestRaidInfo() end
-        if L.UpdateLockoutCache then L.UpdateLockoutCache() end
-        if L.frame and L.frame:IsShown() and L.RefreshUI then L.RefreshUI(true) end
-    end)
-end
-
-local RESETTABLE_MAX_AGE = 6 * 3600
-
 local function DiffLabel(info)
     if not info then return "Normal" end
     if info.difficultyName and info.difficultyName ~= "" then
-        -- Portrait uses short labels like "Normal", not "Normal (10-25 Players)"
         local dn = info.difficultyName
         local low = dn:lower()
         local Loc = L.Loc
@@ -512,182 +484,66 @@ end
 
 local function DisplayNameForReset(info)
     local name = (info and info.name) or "?"
-    if name:find("%(") then return name end
-    return name .. " (" .. DiffLabel(info) .. ")"
+    local diff = DiffLabel(info)
+    if not diff or diff == "" then return name end
+    local low = name:lower()
+    if low:find(diff:lower(), 1, true) then return name end
+    return name .. " (" .. diff .. ")"
 end
 
---- Enrich mapId/diff for instances that already have a real lockout (GetSavedInstanceInfo).
---- Does NOT create phantom "IDs" from mere dungeon visits (LFG/RDF leaves no resettable ID).
-function L.CapData.RememberResettable(name, extra)
-    if not name or name == "" or not InstanceTrackerDB then return end
-    extra = extra or {}
-    -- Only keep enrichment for visits that already look like a real lockout (have id),
-    -- or that we will match later against GetSavedInstanceInfo by name.
-    -- RDF / random finder: no portrait ID → we still store mapId briefly, but
-    -- GetResettableList will not surface it unless lockoutCache confirms.
-    InstanceTrackerDB.resettableInstances = InstanceTrackerDB.resettableInstances or {}
-    local list = InstanceTrackerDB.resettableInstances
-    local now = time()
-    local found
-    for i = #list, 1, -1 do
-        local e = list[i]
-        if not e or not e.name or (now - (e.time or 0)) > RESETTABLE_MAX_AGE then
-            table.remove(list, i)
-        elseif e.name == name then
-            found = e
-        end
+local function ResetNameKey(name)
+    if not name then return nil end
+    name = tostring(name)
+    if L.StripInstanceFactionTag then
+        return L.StripInstanceFactionTag(name) or name
     end
-    if found then
-        found.time = now
-        found.diff = extra.diff or found.diff
-        found.difficultyName = extra.difficultyName or found.difficultyName
-        found.isRaid = extra.isRaid or found.isRaid
-        found.id = extra.id or found.id
-        found.mapId = extra.mapId or found.mapId
-        found.source = extra.source or found.source or "fit"
-    else
-        table.insert(list, 1, {
-            name = name,
-            time = now,
-            diff = extra.diff,
-            difficultyName = extra.difficultyName,
-            isRaid = extra.isRaid,
-            id = extra.id,
-            mapId = extra.mapId,
-            source = extra.source or "fit",
-        })
-    end
-    while #list > 20 do table.remove(list) end
+    return name
 end
 
---- Instances you can actually reset = portrait "Reset Instances" list
---- (GetSavedInstanceInfo / lockoutCache). Mere FIT enter tracking is not an ID.
-function L.CapData.GetResettableList()
-    local out, seenByName = {}, {}
-    local function add(info)
-        if not info or not info.name then return end
-        local existing = seenByName[info.name]
-        if existing then
-            if not existing.mapId and info.mapId then existing.mapId = info.mapId end
-            if not existing.diff and info.diff then existing.diff = info.diff end
-            if not existing.difficultyName and info.difficultyName then
-                existing.difficultyName = info.difficultyName
-            end
-            if not existing.id and info.id then existing.id = info.id end
-            if not existing.index and info.index then existing.index = info.index end
-            if info.isRaid ~= nil and existing.isRaid == nil then existing.isRaid = info.isRaid end
-            return
-        end
-        seenByName[info.name] = info
-        out[#out + 1] = info
-    end
+local function ResetDiffKey(diffText)
+    local s = diffText and string.lower(tostring(diffText)) or ""
+    if s:find("mythic", 1, true) then return "mythic" end
+    if s:find("heroic", 1, true) then return "heroic" end
+    if s:find("normal", 1, true) then return "normal" end
+    return s
+end
 
-    -- Enrichment lookup (mapId/diff from FIT visits) — never a standalone ID source.
-    local enrichByName = {}
-    local now = time()
-    for _, e in ipairs(InstanceTrackerDB and InstanceTrackerDB.resettableInstances or {}) do
-        if e and e.name and (now - (e.time or 0)) <= RESETTABLE_MAX_AGE then
-            enrichByName[e.name] = e
-        end
-    end
+local function ResetStoreKey(name, diffText)
+    local n = ResetNameKey(name)
+    if not n then return nil end
+    return n .. "|" .. ResetDiffKey(diffText)
+end
 
-    if L.UpdateLockoutCache then L.UpdateLockoutCache() end
-    for _, info in ipairs(L.lockoutCache or {}) do
-        if info and info.name then
-            local en = enrichByName[info.name]
-            add({
-                name = info.name,
-                id = info.id,
-                diff = info.diff or (en and en.diff),
-                difficultyName = info.difficultyName or (en and en.difficultyName),
-                isRaid = info.isRaid,
-                locked = info.locked,
-                source = "saved",
-                index = info.index,
-                mapId = en and en.mapId,
-            })
-        end
-    end
+local function StorePortraitReset(which, textArg1, textArg2, data)
+    if type(data) ~= "table" then return end
+    local name = textArg1 and tostring(textArg1) or ""
+    if name == "" then return end
+    local rec = { which = which, name = name, diffText = textArg2, data = data }
+    L._portraitReset = L._portraitReset or {}
+    local key = ResetStoreKey(name, textArg2)
+    if key then L._portraitReset[key] = rec end
+end
 
-    -- Prune FIT-only memories that never became real lockouts (RDF, failed enter, etc.).
-    local list = InstanceTrackerDB and InstanceTrackerDB.resettableInstances
-    if list then
-        for i = #list, 1, -1 do
-            local e = list[i]
-            if e and e.name and not seenByName[e.name] then
-                -- Keep very fresh entries briefly (lockout API may lag after a real lock).
-                if not e.time or (now - e.time) > 180 then
-                    table.remove(list, i)
-                end
+local function FindPortraitReset(name, diffText)
+    if not name or not L._portraitReset then return nil end
+    local key = ResetStoreKey(name, diffText)
+    if key and L._portraitReset[key] then return L._portraitReset[key] end
+    local wantName = ResetNameKey(name)
+    local wantDiff = ResetDiffKey(diffText)
+    local nameOnly, n = nil, 0
+    for _, rec in pairs(L._portraitReset) do
+        if type(rec) == "table" and ResetNameKey(rec.name) == wantName then
+            n = n + 1
+            nameOnly = rec
+            if wantDiff ~= "" and ResetDiffKey(rec.diffText) == wantDiff then
+                return rec
             end
         end
     end
-
-    return out
+    if n == 1 then return nameOnly end
+    return nil
 end
 
---- Ascension API name is ResetInstanceDifficult (not …Difficulty).
-local function ResetInstanceFn()
-    return _G.ResetInstanceDifficult or _G.ResetInstanceDifficulty
-end
-
-local function ForgetResettable(name)
-    local list = InstanceTrackerDB and InstanceTrackerDB.resettableInstances
-    if not list or not name then return end
-    for i = #list, 1, -1 do
-        if list[i] and list[i].name == name then table.remove(list, i) end
-    end
-end
-
---- Call Ascension/classic reset APIs for one instance (after confirm).
-function L.CapData.DoResetOne(info)
-    if not info then return false end
-    local name = info.name or "?"
-    local fn = ResetInstanceFn()
-    local okAny = false
-
-    local function try(arg1, arg2)
-        if not fn then return false end
-        if arg1 == nil then return false end
-        local ok
-        if arg2 ~= nil then
-            ok = pcall(fn, arg1, arg2)
-        else
-            ok = pcall(fn, arg1)
-        end
-        if ok then okAny = true end
-        return ok
-    end
-
-    -- Prefer mapId + difficulty (what portrait-style specific reset usually needs)
-    try(info.mapId, info.diff)
-    try(info.mapId)
-    try(info.diff)
-    try(info.id)
-    try(info.index)
-    try(name, info.diff)
-    try(name)
-    try(DisplayNameForReset(info))
-
-    -- Classic bulk fallback only if nothing else accepted the call
-    if not okAny and type(ResetInstances) == "function" and not info.isRaid then
-        if pcall(ResetInstances) then okAny = true end
-    end
-
-    if RequestRaidInfo then RequestRaidInfo() end
-    ScheduleLockoutRefresh(0.8)
-
-    if okAny then
-        CapPrint("Reset requested for " .. L.ColorText(DisplayNameForReset(info), 1, 1, 0.6) .. ".")
-        ForgetResettable(name)
-    else
-        CapPrint("Could not reset " .. L.ColorText(name, 1, 1, 0.6)
-            .. " — portrait → Reset Instances still works if this fails.")
-    end
-    return okAny
-end
-
---- Use Ascension's real confirm dialog (COMFIRM_… typo). FIT only supplies the target.
 local function SpecificResetPopupName()
     if StaticPopupDialogs and StaticPopupDialogs["COMFIRM_RESET_SPECIFIC_INSTANCE"] then
         return "COMFIRM_RESET_SPECIFIC_INSTANCE"
@@ -698,67 +554,110 @@ local function SpecificResetPopupName()
     return nil
 end
 
-local function EnsureSpecificResetHook()
-    local which = SpecificResetPopupName()
-    if not which then return end
-    local d = StaticPopupDialogs[which]
-    if not d or d._fugaziResetHooked then return end
-    d._fugaziResetHooked = true
-    local orig = d.OnAccept
-    d.OnAccept = function(self, data)
-        -- FIT path: we set _fitResetPending before StaticPopup_Show
-        local pending = L._fitResetPending
-        if pending then
-            L._fitResetPending = nil
-            -- 1) Let Ascension's own handler try with the data we passed to Show
-            if orig then pcall(orig, self, data) end
-            -- 2) Also drive ResetInstanceDifficult ourselves (portrait data shape is opaque)
-            if L.CapData and L.CapData.DoResetOne then
-                L.CapData.DoResetOne(pending)
-            end
+local function DifficultyIndex(info)
+    local d = info and tonumber(info.diff)
+    if d then return d end
+    local s = info and info.difficultyName and string.lower(tostring(info.difficultyName)) or ""
+    if s:find("mythic", 1, true) then return 3 end
+    if s:find("heroic", 1, true) then return 2 end
+    if s:find("normal", 1, true) then return 1 end
+    return nil
+end
+
+-- Portrait OnAccept does unpack(data). data must be a table, never a raw map id.
+local function BuildResetData(info)
+    if not info then return nil end
+    local mapID = tonumber(info.mapID)
+    local diff = DifficultyIndex(info)
+    local id = tonumber(info.id)
+    if id and id <= 0 then id = nil end
+    if not mapID and not diff and not id then return nil end
+    return { mapID or id, diff, mapID = mapID, difficulty = diff, id = id, name = info.name }
+end
+
+local function HookResetFollowup()
+    if L._resetFollowupHooked or type(hooksecurefunc) ~= "function" then return end
+    local function kick()
+        if type(RequestRaidInfo) == "function" then pcall(RequestRaidInfo) end
+    end
+    local hooked = false
+    if type(_G.ResetInstanceDifficult) == "function" then
+        hooksecurefunc("ResetInstanceDifficult", kick)
+        hooked = true
+    end
+    if type(_G.ResetInstanceDifficulty) == "function" then
+        hooksecurefunc("ResetInstanceDifficulty", kick)
+        hooked = true
+    end
+    if type(_G.ResetInstances) == "function" then
+        hooksecurefunc("ResetInstances", kick)
+        hooked = true
+    end
+    if hooked then L._resetFollowupHooked = true end
+end
+
+function L.CapData.EnsureResetReplayHooks()
+    HookResetFollowup()
+    if L._portraitResetHooked or type(hooksecurefunc) ~= "function" then return end
+    L._portraitResetHooked = true
+    L._portraitReset = L._portraitReset or {}
+    hooksecurefunc("StaticPopup_Show", function(which, textArg1, textArg2, data)
+        if type(which) ~= "string" then return end
+        if which ~= "COMFIRM_RESET_SPECIFIC_INSTANCE" and which ~= "CONFIRM_RESET_SPECIFIC_INSTANCE" then
             return
         end
-        -- Portrait / other UI: keep original behaviour only
-        if orig then
-            return orig(self, data)
+        StorePortraitReset(which, textArg1, textArg2, data)
+        HookResetFollowup()
+    end)
+end
+
+function L.CapData.GetResettableList()
+    local out = {}
+    for _, info in ipairs(L.lockoutCache or {}) do
+        if info and info.name then
+            out[#out + 1] = {
+                name = info.name,
+                id = info.id,
+                mapID = info.mapID,
+                diff = info.diff,
+                difficultyName = info.difficultyName,
+                isRaid = info.isRaid,
+                locked = info.locked,
+                index = info.index,
+            }
         end
     end
+    return out
 end
 
 function L.CapData.ResetOneID(info)
+    L.CapData.EnsureResetReplayHooks()
     if not info or not info.name then return false end
-    EnsureSpecificResetHook()
     local which = SpecificResetPopupName()
-
-    if which then
-        L._fitResetPending = info
-        -- Ascension text: "Are you sure you want to reset %s (%s)?"
-        -- → arg1 = instance name, arg2 = difficulty label (e.g. Normal). Not one combined string.
-        local baseName = info.name or "?"
-        -- If name already has a trailing "(Diff)", strip it so we don't double-wrap.
-        local stripped = baseName:match("^(.-)%s*%([^%)]+%)%s*$")
-        if stripped and stripped ~= "" then baseName = stripped end
-        local diffText = DiffLabel(info)
-        -- data: mapId preferred for Ascension's OnAccept / ResetInstanceDifficult
-        local data = info.mapId or info.diff or info.id or info.name
-        local dialog = StaticPopup_Show(which, baseName, diffText, data)
-        if dialog then
-            ScheduleLockoutRefresh(1.2)
-            return true
-        end
-        L._fitResetPending = nil
+    if not which then
+        CapPrint("No instance-reset dialog on this client.")
+        return false
     end
-
-    -- No stock popup: confirm-less last resort
-    return L.CapData.DoResetOne(info)
+    local rec = FindPortraitReset(info.name, info.difficultyName)
+    local data = rec and rec.data
+    if type(data) ~= "table" then
+        data = BuildResetData(info)
+    end
+    if type(data) ~= "table" then
+        CapPrint("No reset target for " .. L.ColorText(DisplayNameForReset(info), 1, 1, 0.6) .. ".")
+        return false
+    end
+    local name = (rec and rec.name) or info.name
+    local diffText = (rec and rec.diffText) or DiffLabel(info)
+    local dialog = StaticPopup_Show(which, name, diffText, data)
+    return dialog and true or false
 end
 
 function L.CapData.ResetAllIDs()
+    L.CapData.EnsureResetReplayHooks()
     if L.IsAscensionRealm and L.IsAscensionRealm() then
-        -- Ascension bulk: real dialogs if present
         if StaticPopupDialogs and StaticPopupDialogs["CONFIRM_RESET_DUNGEONS"] then
             StaticPopup_Show("CONFIRM_RESET_DUNGEONS")
-            ScheduleLockoutRefresh(1.0)
             return true
         end
         CapPrint("On Ascension, pick a named instance from the Reset ID menu.")
@@ -766,25 +665,21 @@ function L.CapData.ResetAllIDs()
     end
     if StaticPopupDialogs and StaticPopupDialogs["CONFIRM_RESET_INSTANCES"] then
         StaticPopup_Show("CONFIRM_RESET_INSTANCES")
-        ScheduleLockoutRefresh(1.0)
         return true
     end
     if type(ResetInstances) == "function" then
         pcall(ResetInstances)
-        ScheduleLockoutRefresh(0.8)
         return true
     end
     return false
 end
 
 function L.CapData.OpenResetMenu(anchor)
+    L.CapData.EnsureResetReplayHooks()
     if type(UIDropDownMenu_Initialize) ~= "function" or type(ToggleDropDownMenu) ~= "function" then
         CapPrint("Dropdown UI missing — right-click a row instead.")
         return
     end
-    if RequestRaidInfo then RequestRaidInfo() end
-    if L.UpdateLockoutCache then L.UpdateLockoutCache() end
-    EnsureSpecificResetHook()
 
     if not L._resetMenuFrame then
         L._resetMenuFrame = CreateFrame("Frame", "FugaziIT_ResetMenu", UIParent, "UIDropDownMenuTemplate")
@@ -839,6 +734,8 @@ function L.CapData.OpenResetMenu(anchor)
 
     ToggleDropDownMenu(1, nil, menu, anchor or "cursor", 0, 0)
 end
+
+L.CapData.EnsureResetReplayHooks()
 
 ----------------------------------------------------------------------
 -- CAP UI LAYER
@@ -1024,6 +921,14 @@ end
 L.RefreshUI = function(forceRebuild)
     if not L.frame then return end
     if not forceRebuild and not L.frame:IsShown() then return end
+    L._silentUIRebuild = true
+    if not L._silentClearFrame then
+        L._silentClearFrame = CreateFrame("Frame")
+    end
+    L._silentClearFrame:SetScript("OnUpdate", function(self)
+        L._silentUIRebuild = false
+        self:SetScript("OnUpdate", nil)
+    end)
     if L.PurgeOld then L.PurgeOld() end
     if L.ResetPools then L.ResetPools() end
 
@@ -1149,14 +1054,28 @@ L.RefreshUI = function(forceRebuild)
     for _, b in ipairs(content._lockoutClicks) do if b then b:Hide() end end
     local lockoutClickIdx = 0
 
-    local function FormatLockoutStatus(info)
-        if not info.isLocked then
+    -- Fraction is killed/total (done), not remaining. "Available" on the parent
+    -- means loot left; if every boss is loot-locked the row is Locked even when
+    -- the instance ID was reset (you can zone in, you cannot loot again).
+    local function FormatLockoutStatus(info, killed, lootable, total)
+        if not total or total <= 0 then
+            if info.isLocked then
+                return "|cffff8844Locked|r"
+            end
             return "|cff44ff44Available|r"
         end
-        if info.timeUnknown or not info.timeLeft or info.timeLeft <= 0 then
-            return "|cffff8844Locked|r"
+        local frac = "|cff888888" .. killed .. "/" .. total .. "|r"
+        if lootable == 0 then
+            return "|cffff8844Locked|r " .. frac
         end
-        return "|cffff8844" .. (L.FormatTime and L.FormatTime(info.timeLeft) or tostring(info.timeLeft)) .. "|r"
+        local extra = ""
+        if killed > 0 then
+            extra = "  |cff44ff44" .. lootable .. " available|r"
+        end
+        if info.isLocked then
+            return "|cffff8844Locked|r " .. frac .. extra
+        end
+        return "|cff44ff44Available|r " .. frac .. extra
     end
 
     local function LockoutExpandKey(info)
@@ -1229,10 +1148,6 @@ L.RefreshUI = function(forceRebuild)
         btn:Show()
     end
 
-    -- No FIT-only "phantom ID" list: LFG/RDF visits are not resettable instance IDs.
-    -- Truth source is GetSavedInstanceInfo (same as portrait → Reset Instances).
-    -- Real lockouts are rendered from CapData.GetLockouts / lockoutCache above.
-
     local header2 = L.GetText and L.GetText(content)
     if header2 then
         header2:SetPoint("TOPLEFT", content, "TOPLEFT", pad, -yOff)
@@ -1242,8 +1157,10 @@ L.RefreshUI = function(forceRebuild)
     yOff = yOff + hdrSpacing
 
     local buckets = L.CapData.GetLockouts()
-    local order = L.EXPANSION_ORDER or { "classic", "tbc", "wotlk" }
-    local labels = L.EXPANSION_LABELS or { classic = "Classic", tbc = "TBC", wotlk = "WotLK" }
+    local order = L.EXPANSION_ORDER or { "world", "classic", "tbc", "wotlk" }
+    local labels = L.EXPANSION_LABELS or {
+        world = "World Bosses", classic = "Classic", tbc = "TBC", wotlk = "WotLK",
+    }
 
     local function RenderLockoutEntry(info)
         local row = L.GetRow and L.GetRow(content, false)
@@ -1259,28 +1176,29 @@ L.RefreshUI = function(forceRebuild)
         local key = LockoutExpandKey(info)
         local expanded = hasBosses and L.lockoutExpanded[key]
 
-        local killedN, totalN = 0, hasBosses and #bosses or 0
+        local killed, lootable, total = 0, 0, 0
         if hasBosses then
+            total = #bosses
             for _, b in ipairs(bosses) do
-                if b.killed then killedN = killedN + 1 end
+                if b.killed then
+                    killed = killed + 1
+                else
+                    lootable = lootable + 1
+                end
             end
         end
+        -- Name color = instance ID only (tooltip #id). Loot-done stays "Locked" on the right.
+        local nameRed = tonumber(info.id) and tonumber(info.id) > 0
 
-        -- ASCII only (Frizqt): + collapsed, - expanded. Unicode arrows became "?".
         local chevron = ""
         if hasBosses then
             chevron = expanded and "|cffaaaaaa-|r " or "|cffaaaaaa+|r "
         end
-        local extPart = info.extended and " |cff00ff00(Ext)|r" or ""
         local leftText = chevron
-            .. (info.isLocked and "|cffff4444" or "|cff44ff44")
+            .. (nameRed and "|cffff4444" or "|cff44ff44")
             .. (info.name or "Unknown") .. "|r"
             .. (info.diffTag or "")
-            .. extPart
-        local statusText = FormatLockoutStatus(info)
-        if hasBosses and not expanded then
-            statusText = statusText .. " |cff888888" .. killedN .. "/" .. totalN .. "|r"
-        end
+        local statusText = FormatLockoutStatus(info, killed, lootable, total)
 
         local tipPlain = (info.name or "Unknown")
             .. (info.difficultyName and (" " .. info.difficultyName) or "")
@@ -1337,7 +1255,11 @@ L.RefreshUI = function(forceRebuild)
             end
             yOff = yOff + hdrSpacing
 
-            table.sort(bucket, function(a, b) return (a.name or "") < (b.name or "") end)
+            table.sort(bucket, function(a, b)
+                local na, nb = a.name or "", b.name or ""
+                if na ~= nb then return na < nb end
+                return (a.difficultyName or "") < (b.difficultyName or "")
+            end)
             for _, info in ipairs(bucket) do
                 RenderLockoutEntry(info)
             end
