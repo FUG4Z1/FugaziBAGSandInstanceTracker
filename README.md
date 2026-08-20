@@ -7,7 +7,7 @@
 Inventory, bank, loot cleanup, and GPH farm tracking for **World of Warcraft 3.3.5a** (WotLK).  
 Made for private servers (currently Ascension CoA).
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.3-blue)
 ![Interface](https://img.shields.io/badge/interface-3.3.5a-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
